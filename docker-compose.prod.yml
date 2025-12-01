@@ -1,0 +1,73 @@
+services:
+  # Test stage - must pass before production deployment
+  cruciverba-tests:
+    build:
+      context: .
+      target: test-stage
+    container_name: cruciverba-tests
+    environment:
+      - FLASK_ENV=testing
+      - DEBUG=False
+      - SECRET_KEY=build-test-secret-key
+      - FORM_PASSWORD=bianca
+      - ADMIN_PASSWORD=bianca2024
+      - CELEBRATED_PERSON_NAME=${CELEBRATED_PERSON_NAME:-Bianca}
+    volumes:
+      - test_results:/app/test-results
+    command: >
+      sh -c "
+        echo '🧪 Running comprehensive test suite...' &&
+        python -m pytest test_app.py -v --tb=short &&
+        echo '✅ All tests passed! Production deployment approved.' &&
+        mkdir -p /app/test-results &&
+        echo 'Tests passed successfully' > /app/test-results/tests-passed
+      "
+    profiles:
+      - test
+
+  # Production application - only starts if tests pass
+  cruciverba-app:
+    build:
+      context: .
+      target: production
+    container_name: cruciverba-nexus-prod
+    ports:
+      - "0.0.0.0:8080:5000"
+    volumes:
+      - cruciverba_data:/app/data
+      - test_results:/app/test-results:ro
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+      - DEBUG=False
+      - CELEBRATED_PERSON_NAME=${CELEBRATED_PERSON_NAME:-Bianca}
+    env_file:
+      - .env
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Ensure tests passed before starting
+    entrypoint: >
+      sh -c "
+        if [ ! -f /app/test-results/tests-passed ]; then
+          echo '❌ Tests have not passed. Cannot start production application.'
+          echo 'Run: docker-compose --profile test up cruciverba-tests'
+          exit 1
+        fi
+        echo '✅ Tests passed. Starting production application...'
+        exec python app.py
+      "
+
+volumes:
+  cruciverba_data:
+    driver: local
+  test_results:
+    driver: local 

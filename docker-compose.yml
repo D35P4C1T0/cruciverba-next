@@ -1,0 +1,31 @@
+
+
+services:
+  cruciverba-app:
+    build: 
+      context: .
+      args:
+        - BUILDKIT_INLINE_CACHE=0
+    image: cruciverba-nexus-app
+    container_name: cruciverba-nexus
+    ports:
+      - "0.0.0.0:8080:5000"
+    volumes:
+      - cruciverba_data:/app/data
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+      - CELEBRATED_PERSON_NAME=${CELEBRATED_PERSON_NAME:-Bianca}
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  cruciverba_data:
+    driver: local 

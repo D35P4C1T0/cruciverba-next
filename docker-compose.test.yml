@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: cruciverba-test
+    volumes:
+      - .:/app
+      - test_data:/app/data
+    environment:
+      - FLASK_ENV=testing
+      - DEBUG=False
+      - SECRET_KEY=test-secret-key-very-long-and-secure
+      - FORM_PASSWORD=bianca
+      - ADMIN_PASSWORD=bianca2024
+      - CELEBRATED_PERSON_NAME=${CELEBRATED_PERSON_NAME:-Bianca}
+      - DATABASE_PATH=data/test_cruciverba.db
+    command: python -m pytest test_app.py -v --tb=short
+    profiles:
+      - test
+
+  integration-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: cruciverba-integration-test
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_ENV=testing
+      - DEBUG=False
+    depends_on:
+      - cruciverba-app
+    networks:
+      - default
+    command: python test_integration.py
+    profiles:
+      - integration
+
+  # Include the main app for integration tests
+  cruciverba-app:
+    build: .
+    container_name: cruciverba-test-app
+    ports:
+      - "0.0.0.0:8080:5000"
+    volumes:
+      - test_data:/app/data
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+      - DEBUG=False
+    env_file:
+      - .env
+    restart: "no"
+    profiles:
+      - integration
+
+volumes:
+  test_data:
+    driver: local 

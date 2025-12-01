@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block subheader %}
+<p class="lead mb-0">
+    <i class="fas fa-puzzle-piece me-2"></i>
+    Stiamo creando un cruciverba speciale per {{ person_name }}! Inserisci una parola che ti fa pensare a {{ person_name }}, e una breve frase per farla indovinare.
+</p>
+{% endblock %}
+
+{% block admin_button %}
+<a href="{{ url_for('admin') }}" class="admin-link" title="Admin">
+    <i class="fas fa-cog"></i>
+</a>
+{% endblock %}
+
+{% block content %}
+<form method="POST" id="crosswordForm">
+    {{ form.hidden_tag() }}
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            {{ form.parola.label(class="form-label") }}
+            <i class="fas fa-font me-2 text-primary"></i>
+            <strong>Parola</strong> <span class="text-danger">*</span>
+            {{ form.parola(class="form-control form-control-lg", placeholder="es: Tisanina, Ansia, ...", maxlength="50") }}
+            <div class="form-text">Una parola o frase che ti ricorda {{ person_name }}</div>
+            {% if form.parola.errors %}
+                <div class="text-danger mt-1">
+                    {% for error in form.parola.errors %}
+                        <small>{{ error }}</small>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="col-md-6 mb-3">
+            {{ form.nome.label(class="form-label") }}
+            <i class="fas fa-user me-2 text-secondary"></i>
+            <strong>Nome</strong> <span class="text-danger">*</span>
+            {{ form.nome(class="form-control form-control-lg", placeholder="Il tuo nome", maxlength="50") }}
+            {% if form.nome.errors %}
+                <div class="text-danger mt-1">
+                    {% for error in form.nome.errors %}
+                        <small>{{ error }}</small>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="mb-4">
+        {{ form.frase_indizio.label(class="form-label") }}
+        <i class="fas fa-lightbulb me-2 text-warning"></i>
+        <strong>Frase indizio</strong> <span class="text-danger">*</span>
+        {{ form.frase_indizio(class="form-control form-control-lg", rows="3", placeholder="Frase indizio", minlength="10", maxlength="200") }}
+        <div class="form-text">Almeno 10 caratteri - aiuta {{ person_name }} a indovinare la parola!</div>
+        {% if form.frase_indizio.errors %}
+            <div class="text-danger mt-1">
+                {% for error in form.frase_indizio.errors %}
+                    <small>{{ error }}</small>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Honeypot field for basic spam protection -->
+    <input type="text" name="website" style="display: none;">
+    
+    <div class="text-center">
+        <button type="submit" class="btn btn-primary btn-lg">
+            <i class="fas fa-paper-plane me-2"></i>
+            Invia il tuo contributo
+        </button>
+        
+        <div class="mt-3">
+            <a href="{{ url_for('form_logout') }}" class="btn btn-outline-secondary btn-sm mobile-logout-btn">
+                <i class="fas fa-sign-out-alt me-1"></i>
+                Disconnetti
+            </a>
+        </div>
+    </div>
+</form>
+
+<hr class="my-4">
+
+<div class="text-center text-muted">
+    <small>
+        <i class="fas fa-info-circle me-1"></i>
+        Tutti i contributi verranno utilizzati per creare un cruciverba personalizzato per la laurea di {{ person_name }}
+    </small>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('crosswordForm').addEventListener('submit', function(e) {
+    const parola = document.getElementById('parola').value.trim();
+    const fraseIndizio = document.getElementById('frase_indizio').value.trim();
+    
+    // Client-side validation
+    if (!parola) {
+        alert('La parola è obbligatoria');
+        e.preventDefault();
+        return;
+    }
+    
+    if (!/^[a-zA-ZàáèéìíòóùúÀÁÈÉÌÍÒÓÙÚ\s]+$/.test(parola)) {
+        alert('La parola può contenere solo lettere e spazi');
+        e.preventDefault();
+        return;
+    }
+    
+    if (fraseIndizio.length < 10) {
+        alert('La frase indizio deve essere di almeno 10 caratteri');
+        e.preventDefault();
+        return;
+    }
+    
+    // Basic honeypot check
+    if (document.querySelector('input[name="website"]').value) {
+        e.preventDefault();
+        return;
+    }
+});
+
+// Auto-uppercase the word as user types
+document.getElementById('parola').addEventListener('input', function(e) {
+    e.target.value = e.target.value.toUpperCase();
+});
+</script>
+{% endblock %} 

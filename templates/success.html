@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Contributo Inviato - Cruciverba di laurea per {{ person_name }}{% endblock %}
+
+{% block header %}
+<i class="fas fa-check-circle me-2"></i>Contributo Inviato!
+{% endblock %}
+
+{% block subheader %}
+<p class="lead mb-0">
+    Grazie {{ nome }}! Il tuo contributo è stato registrato con successo.
+</p>
+{% endblock %}
+
+{% block content %}
+<div class="text-center">
+    <div class="alert alert-success">
+        <i class="fas fa-puzzle-piece fa-2x mb-3"></i>
+        <h4>Contributo salvato!</h4>
+        <p class="mb-0">
+            Il tuo contributo è stato aggiunto alla collezione per il cruciverba di laurea di {{ person_name }}.
+        </p>
+    </div>
+    
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-lightbulb me-2 text-warning"></i>
+                        Vuoi aggiungere un'altra parola?
+                    </h5>
+                    <p class="card-text text-muted">
+                        Se ti viene in mente un'altra parola o frase che ricorda {{ person_name }}, 
+                        puoi aggiungere un altro contributo!
+                    </p>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                        <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg">
+                            <i class="fas fa-plus me-2"></i>
+                            Aggiungi un'altra parola
+                        </a>
+                        
+                        <a href="{{ url_for('form_logout') }}" class="btn btn-outline-secondary btn-lg">
+                            <i class="fas fa-sign-out-alt me-2"></i>
+                            Finito, disconnetti
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <hr class="my-4">
+    
+    <div class="text-muted">
+        <p>
+            <i class="fas fa-info-circle me-1"></i>
+            Tutti i contributi vengono utilizzati per creare un cruciverba personalizzato per la laurea di {{ person_name }}
+        </p>
+        <small>
+            <i class="fas fa-users me-1"></i>
+            Grazie per aver partecipato a questo progetto speciale!
+        </small>
+    </div>
+</div>
+{% endblock %} 

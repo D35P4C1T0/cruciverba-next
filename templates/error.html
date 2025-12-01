@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Cruciverba di laurea per {{ person_name }}{% endblock %}
+
+{% block header %}
+<i class="fas fa-exclamation-triangle me-2"></i>{{ title }}
+{% endblock %}
+
+{% block subheader %}
+<p class="lead mb-0">{{ message }}</p>
+{% endblock %}
+
+{% block content %}
+<div class="text-center">
+    <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle fa-2x mb-3"></i>
+        <h4>{{ title }}</h4>
+        <p class="mb-0">{{ message }}</p>
+    </div>
+    
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-info-circle me-2 text-info"></i>
+                        Cosa puoi fare
+                    </h5>
+                    
+                    {% if title == "Troppi tentativi" %}
+                    <p class="card-text">
+                        Aspetta qualche minuto prima di riprovare. Questo aiuta a mantenere il sito sicuro per tutti.
+                    </p>
+                    {% else %}
+                    <p class="card-text">
+                        Se il problema persiste, contatta gli organizzatori.
+                    </p>
+                    {% endif %}
+                    
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('index') }}" class="btn btn-primary">
+                            <i class="fas fa-home me-2"></i>
+                            Torna alla home
+                        </a>
+                        
+                        <button onclick="history.back()" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>
+                            Pagina precedente
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <hr class="my-4">
+    
+    <div class="text-muted">
+        <small>
+            <i class="fas fa-shield-alt me-1"></i>
+            Questo sito è protetto da misure di sicurezza per garantire un'esperienza sicura a tutti gli utenti.
+        </small>
+    </div>
+</div>
+{% endblock %} 

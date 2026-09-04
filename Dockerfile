@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.11-slim AS test-stage
+FROM python:3.14-slim AS test-stage
 
 ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=84.0.0
@@ -29,7 +29,7 @@ USER 10001:10001
 RUN python -m pytest test_app.py -q
 
 
-FROM python:3.11-slim AS production
+FROM python:3.14-slim AS production
 
 ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=84.0.0

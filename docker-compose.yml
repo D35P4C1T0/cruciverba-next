@@ -1,31 +1,69 @@
-
-
 services:
   cruciverba-app:
-    build: 
+    build:
       context: .
-      args:
-        - BUILDKIT_INLINE_CACHE=0
-    image: cruciverba-nexus-app
-    container_name: cruciverba-nexus
+      target: production
+    image: cruciverba-nexus-app:local
     ports:
-      - "0.0.0.0:8080:5000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-5000}:5000"
     volumes:
       - cruciverba_data:/app/data
     environment:
-      - FLASK_ENV=production
-      - PYTHONUNBUFFERED=1
-      - CELEBRATED_PERSON_NAME=${CELEBRATED_PERSON_NAME:-Bianca}
+      APP_ENV: development
+      CELEBRATED_PERSON_NAME: ${CELEBRATED_PERSON_NAME:-Bianca}
+      DATABASE_PATH: data/cruciverba.db
+      RATE_LIMIT_STORAGE_URL: redis://rate-limit:6379/0
+      FORCE_HTTPS: "False"
+      TRUSTED_HOSTS: localhost,127.0.0.1
+      TRUSTED_PROXY_COUNT: "0"
     env_file:
       - .env
+    depends_on:
+      rate-limit:
+        condition: service_healthy
     restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 1.0
+    networks:
+      - frontend
+      - backend
+
+  rate-limit:
+    image: redis:8.10.0-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    user: "999:999"
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /data:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    pids_limit: 50
+    mem_limit: 96m
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
 
 volumes:
   cruciverba_data:
-    driver: local 
+
+networks:
+  frontend:
+    name: cruciverba_frontend
+  backend:
+    internal: true

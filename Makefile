@@ -44,24 +44,24 @@ dev: ## Start development environment (tests run during build)
 
 prod: build ## Deploy to production (full pipeline)
 	@echo "$(GREEN)🚀 Production deployment completed!$(NC)"
-	@echo "$(YELLOW)Application available at: http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Application available at: http://localhost:5000$(NC)"
 
 ci: ## Run CI/CD pipeline (test + build)
 	@echo "$(BLUE)🔄 Running CI/CD pipeline...$(NC)"
 	@./scripts/build-with-tests.sh ci
 	@echo "$(GREEN)✅ CI/CD pipeline completed!$(NC)"
 
-clean: ## Clean up containers and images
+clean: ## Stop containers without deleting persistent data
 	@echo "$(YELLOW)🧹 Cleaning up...$(NC)"
-	@docker-compose down --volumes --remove-orphans 2>/dev/null || true
-	@docker-compose -f docker-compose.prod.yml down --volumes --remove-orphans 2>/dev/null || true
-	@docker-compose -f docker-compose.test.yml down --volumes --remove-orphans 2>/dev/null || true
-	@docker system prune -f --volumes
+	@docker compose down --remove-orphans 2>/dev/null || true
+	@docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+	@docker compose -f docker-compose.test.yml down --remove-orphans 2>/dev/null || true
+	@echo "$(GREEN)Volumes and images preserved.$(NC)"
 	@echo "$(GREEN)✅ Cleanup completed!$(NC)"
 
 health: ## Check application health
 	@echo "$(BLUE)🏥 Checking application health...$(NC)"
-	@if curl -f http://localhost:8080 >/dev/null 2>&1; then \
+	@if curl -f http://localhost:5000/healthz >/dev/null 2>&1; then \
 		echo "$(GREEN)✅ Application is healthy and responding$(NC)"; \
 	else \
 		echo "$(RED)❌ Application is not responding$(NC)"; \
@@ -97,7 +97,7 @@ benchmark: ## Run performance benchmarks
 	@make prod >/dev/null 2>&1 &
 	@sleep 15
 	@echo "Running load test..."
-	@curl -o /dev/null -s -w "Response time: %{time_total}s\nStatus: %{http_code}\n" http://localhost:8080
+	@curl -o /dev/null -s -w "Response time: %{time_total}s\nStatus: %{http_code}\n" http://localhost:5000/healthz
 	@echo "Benchmark completed!"
 
 status: ## Show system status
@@ -131,4 +131,4 @@ release: quality-gate ## Prepare release (all quality gates must pass)
 	@echo "$(YELLOW)All quality gates passed:$(NC)"
 	@echo "  ✅ Tests passed"
 	@echo "  ✅ Security scan passed"
-	@echo "  ✅ Build successful" 
+	@echo "  ✅ Build successful"

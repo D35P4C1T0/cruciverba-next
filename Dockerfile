@@ -1,79 +1,65 @@
-# Multi-stage build: Test stage first, then production
+# syntax=docker/dockerfile:1.7
+
 FROM python:3.11-slim AS test-stage
 
+ARG PIP_VERSION=26.2.1
+ARG SETUPTOOLS_VERSION=84.0.0
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    APP_ENV=testing \
+    DEBUG=False
+
 WORKDIR /app
 
-# Install system dependencies for testing
-RUN apt-get update && apt-get install -y \
-    sqlite3 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements and install all dependencies (including test deps)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade \
+        pip==${PIP_VERSION} setuptools==${SETUPTOOLS_VERSION} \
+    && python -m pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY . .
+RUN addgroup --gid 10001 testgroup \
+    && adduser --uid 10001 --gid 10001 --disabled-password --gecos '' testuser \
+    && mkdir -p /app/data \
+    && chown -R testuser:testgroup /app
 
-# Create test user
-RUN adduser --disabled-password --gecos '' testuser && \
-    chown -R testuser:testuser /app && \
-    mkdir -p /app/data && \
-    chown testuser:testuser /app/data
+COPY --chown=testuser:testgroup . .
+USER 10001:10001
 
-USER testuser
+RUN python -m pytest test_app.py -q
 
-# Set test environment
-ENV FLASK_ENV=testing
-ENV DEBUG=False
-ENV SECRET_KEY=build-test-secret-key
-ENV FORM_PASSWORD=bianca
-ENV ADMIN_PASSWORD=bianca2024
-ENV CELEBRATED_PERSON_NAME=Bianca
 
-# Run tests - BUILD WILL FAIL IF TESTS FAIL
-RUN python -m pytest test_app.py -v --tb=short
-
-# Production stage - only built if tests pass
 FROM python:3.11-slim AS production
 
+ARG PIP_VERSION=26.2.1
+ARG SETUPTOOLS_VERSION=84.0.0
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    APP_ENV=production
+
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    sqlite3 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy production requirements and install only production dependencies
 COPY requirements-prod.txt .
-RUN pip install --no-cache-dir -r requirements-prod.txt
+RUN python -m pip install --no-cache-dir --upgrade \
+        pip==${PIP_VERSION} setuptools==${SETUPTOOLS_VERSION} \
+    && python -m pip install --no-cache-dir -r requirements-prod.txt
 
-# Copy application files (excluding test files)
-COPY --from=test-stage /app/app.py .
-COPY --from=test-stage /app/templates/ ./templates/
-# Copy static files only if they exist
-RUN mkdir -p ./static
+RUN addgroup --gid 10001 appgroup \
+    && adduser --uid 10001 --gid 10001 --disabled-password --gecos '' appuser \
+    && mkdir -p /app/data \
+    && chown -R appuser:appgroup /app
 
-# Create non-root user
-RUN adduser --disabled-password --gecos '' appuser && \
-    chown -R appuser:appuser /app && \
-    mkdir -p /app/data && \
-    chown appuser:appuser /app/data
+COPY --from=test-stage --chown=appuser:appgroup /app/app.py /app/wsgi.py ./
+COPY --from=test-stage --chown=appuser:appgroup /app/cruciverba/ ./cruciverba/
+COPY --from=test-stage --chown=appuser:appgroup /app/templates/ ./templates/
+COPY --from=test-stage --chown=appuser:appgroup /app/static/ ./static/
 
-USER appuser
-
-# Expose port
+USER 10001:10001
 EXPOSE 5000
 
-# Set environment variables
-ENV FLASK_ENV=production
-ENV PYTHONUNBUFFERED=1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/healthz', timeout=3)"]
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/ || exit 1
-
-# Run the application
-CMD ["python", "app.py"] 
+CMD ["gunicorn", "--bind=0.0.0.0:5000", "--workers=2", "--threads=2", "--timeout=30", "--graceful-timeout=30", "--worker-tmp-dir=/tmp", "--access-logfile=-", "--error-logfile=-", "--preload", "wsgi:application"]

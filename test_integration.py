@@ -9,12 +9,13 @@ import pytest
 import requests
 import time
 import threading
+import os
 from urllib.parse import urljoin
 
 # Configuration for integration tests
-BASE_URL = "http://localhost:8080"
-FORM_PASSWORD = "bianca"
-ADMIN_PASSWORD = "bianca2024"
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8080")
+FORM_PASSWORD = os.getenv("FORM_PASSWORD", "bianca")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "bianca2024")
 
 class TestLiveApplication:
     """Integration tests against running application."""
@@ -73,7 +74,7 @@ class TestLiveApplication:
         assert "Grazie Integration Test User!" in response.text
         
         # Step 6: Logout
-        response = session.get(f"{BASE_URL}/form_logout")
+        response = session.post(f"{BASE_URL}/logout", allow_redirects=False)
         assert response.status_code == 302
     
     def test_admin_workflow(self):
@@ -103,7 +104,7 @@ class TestLiveApplication:
         assert 'Parola,Frase Indizio,Nome,Data' in response.text
         
         # Step 5: Logout
-        response = session.get(f"{BASE_URL}/admin/logout")
+        response = session.post(f"{BASE_URL}/admin/logout", allow_redirects=False)
         assert response.status_code == 302
     
     def test_security_headers_live(self):
@@ -113,10 +114,10 @@ class TestLiveApplication:
         # Check security headers
         assert response.headers.get('X-Content-Type-Options') == 'nosniff'
         assert response.headers.get('X-Frame-Options') == 'DENY'
-        assert response.headers.get('X-XSS-Protection') == '1; mode=block'
-        assert 'max-age=31536000' in response.headers.get('Strict-Transport-Security', '')
+        assert response.headers.get('X-XSS-Protection') == '0'
+        assert 'Strict-Transport-Security' not in response.headers
         assert 'default-src \'self\'' in response.headers.get('Content-Security-Policy', '')
-        assert response.headers.get('Referrer-Policy') == 'strict-origin-when-cross-origin'
+        assert response.headers.get('Referrer-Policy') == 'no-referrer'
     
     def test_rate_limiting_simulation(self):
         """Test rate limiting with multiple requests."""
@@ -232,7 +233,9 @@ class TestLiveApplication:
             assert response.status_code in [200, 400]
             # Should not contain SQL error messages
             assert 'syntax error' not in response.text.lower()
-            assert 'sql' not in response.text.lower()
+            assert 'sqlite' not in response.text.lower()
+            assert 'operationalerror' not in response.text.lower()
+            assert 'traceback' not in response.text.lower()
 
 class TestDockerDeployment:
     """Tests specific to Docker deployment."""
@@ -296,4 +299,4 @@ def run_integration_tests():
 
 if __name__ == '__main__':
     success = run_integration_tests()
-    exit(0 if success else 1) 
+    exit(0 if success else 1)

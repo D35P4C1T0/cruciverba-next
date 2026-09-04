@@ -1,16 +1,13 @@
-version: '3.8'
-
 services:
   test-runner:
     build:
       context: .
       dockerfile: Dockerfile.test
-    container_name: cruciverba-test
     volumes:
       - .:/app
       - test_data:/app/data
     environment:
-      - FLASK_ENV=testing
+      - APP_ENV=testing
       - DEBUG=False
       - SECRET_KEY=test-secret-key-very-long-and-secure
       - FORM_PASSWORD=bianca
@@ -25,38 +22,42 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test
-    container_name: cruciverba-integration-test
     volumes:
       - .:/app
     environment:
-      - FLASK_ENV=testing
-      - DEBUG=False
+      - BASE_URL=http://cruciverba-app:5000
+      - FORM_PASSWORD=bianca
+      - ADMIN_PASSWORD=bianca2024
     depends_on:
-      - cruciverba-app
+      cruciverba-app:
+        condition: service_healthy
     networks:
       - default
-    command: python test_integration.py
+    command: python -m pytest test_integration.py -q
     profiles:
       - integration
 
   # Include the main app for integration tests
   cruciverba-app:
     build: .
-    container_name: cruciverba-test-app
-    ports:
-      - "0.0.0.0:8080:5000"
     volumes:
       - test_data:/app/data
     environment:
-      - FLASK_ENV=production
+      - APP_ENV=development
       - PYTHONUNBUFFERED=1
       - DEBUG=False
-    env_file:
-      - .env
+      - WTF_CSRF_ENABLED=False
+      - RATELIMIT_ENABLED=False
+      - SECRET_KEY=test-secret-key-at-least-thirty-two-characters
+      - FORM_PASSWORD=bianca
+      - ADMIN_PASSWORD=bianca2024
+      - RATE_LIMIT_STORAGE_URL=memory://
+      - FORCE_HTTPS=False
+      - TRUSTED_HOSTS=localhost,127.0.0.1,cruciverba-app
     restart: "no"
     profiles:
       - integration
 
 volumes:
   test_data:
-    driver: local 
+    driver: local

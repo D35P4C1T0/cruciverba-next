@@ -5,7 +5,7 @@ import sys
 import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app import app as cruciverba_app, get_form_password, get_admin_password, sanitize_input, is_valid_word, is_valid_clue, get_db_connection
+from app import app as cruciverba_app, get_form_password, get_admin_password, sanitize_csv_cell, sanitize_input, is_valid_word, is_valid_clue, get_db_connection
 
 # Global test database
 test_db_path = None
@@ -90,11 +90,16 @@ class TestSecurityHeaders:
         # Test for security headers
         assert 'X-Content-Type-Options' in response.headers
         assert 'X-Frame-Options' in response.headers
-        assert 'X-XSS-Protection' in response.headers
-        assert 'Strict-Transport-Security' in response.headers
+        assert response.headers['X-XSS-Protection'] == '0'
+        assert 'Strict-Transport-Security' not in response.headers
+        assert response.headers['Referrer-Policy'] == 'no-referrer'
+        assert 'Permissions-Policy' in response.headers
+        assert response.headers['Cache-Control'] == 'no-store'
         
         # Test CSP header
         assert 'Content-Security-Policy' in response.headers
+        assert "object-src 'none'" in response.headers['Content-Security-Policy']
+        assert "frame-ancestors 'none'" in response.headers['Content-Security-Policy']
     
     def test_session_cookie_security(self, client):
         """Test session cookie security settings."""
@@ -141,7 +146,7 @@ class TestAuthentication:
     def test_form_logout(self, authenticated_session):
         """Test form logout functionality."""
         # Access logout
-        response = authenticated_session.get('/logout')
+        response = authenticated_session.post('/logout')
         assert response.status_code == 302  # Should redirect
         
         # Verify we're logged out by trying to access form
@@ -150,8 +155,12 @@ class TestAuthentication:
     
     def test_admin_logout(self, admin_session):
         """Test admin logout functionality."""
-        response = admin_session.get('/admin/logout')
+        response = admin_session.post('/admin/logout')
         assert response.status_code == 302  # Should redirect
+
+    def test_logout_rejects_get(self, authenticated_session, admin_session):
+        assert authenticated_session.get('/logout').status_code == 405
+        assert admin_session.get('/admin/logout').status_code == 405
 
 class TestFormSubmission:
     """Test form submission functionality."""
@@ -196,10 +205,10 @@ class TestFormSubmission:
         response = authenticated_session.post('/', data=data)
         assert response.status_code == 200
     
-    def test_invalid_word_characters(self, authenticated_session):
-        """Test submission with invalid characters in word."""
+    def test_word_accepts_numbers_and_symbols(self, authenticated_session):
+        """Words may contain numbers, punctuation, and symbols."""
         data = {
-            'parola': 'TEST123!@#',  # Invalid characters
+            'parola': 'TEST123!@#',
             'frase_indizio': 'Una frase indizio abbastanza lunga',
             'nome': 'Test'
         }
@@ -207,38 +216,45 @@ class TestFormSubmission:
         response = authenticated_session.post('/', data=data)
         assert response.status_code == 200
         page_content = response.get_data(as_text=True)
-        assert 'La parola può contenere solo lettere' in page_content
+        assert 'Grazie Test!' in page_content
     
-    def test_short_clue(self, authenticated_session):
-        """Test submission with too short clue."""
+    def test_short_clue_is_accepted(self, authenticated_session):
+        """A clue containing one or more characters is accepted."""
         data = {
             'parola': 'TEST',
-            'frase_indizio': 'Short',  # Too short
+            'frase_indizio': 'X',
             'nome': 'Test'
         }
         
         response = authenticated_session.post('/', data=data)
         assert response.status_code == 200
         page_content = response.get_data(as_text=True)
-        assert 'almeno 10 caratteri' in page_content
+        assert 'Grazie Test!' in page_content
     
-    def test_duplicate_submission(self, authenticated_session):
-        """Test duplicate submission prevention."""
+    def test_duplicate_submission_is_allowed(self, authenticated_session):
+        """The same contribution may be submitted more than once."""
         data = {
             'parola': 'DUPLICATE',
             'frase_indizio': 'Una frase indizio molto lunga per evitare errori',
             'nome': 'Test User'
         }
         
-        # First submission should succeed
         response = authenticated_session.post('/', data=data)
         assert response.status_code == 200
+        assert 'Grazie Test User!' in response.get_data(as_text=True)
         
-        # Second identical submission should be rejected
         response = authenticated_session.post('/', data=data)
         assert response.status_code == 200
-        page_content = response.get_data(as_text=True)
-        assert 'già stato registrato' in page_content
+        assert 'Grazie Test User!' in response.get_data(as_text=True)
+
+        import app
+        conn = app.get_db_connection()
+        count = conn.execute(
+            'SELECT COUNT(*) FROM submissions WHERE parola = ? AND frase_indizio = ?',
+            ('duplicate', data['frase_indizio'])
+        ).fetchone()[0]
+        conn.close()
+        assert count == 2
     
 class TestInputSanitization:
     """Test input sanitization and XSS prevention."""
@@ -413,7 +429,7 @@ class TestSuccessPage:
         assert 'Grazie Mario Rossi!' in page_content
         assert 'Aggiungi un\'altra parola' in page_content
         assert 'Finito, disconnetti' in page_content
-        assert 'Contributo salvato!' in page_content
+        assert 'intro-copy' not in page_content
     
     def test_add_another_word_link(self, authenticated_session):
         """Test that add another word link works."""
@@ -431,6 +447,35 @@ class TestSuccessPage:
         response = authenticated_session.get('/')
         assert response.status_code == 200
         assert 'Parola' in response.get_data(as_text=True)
+
+    def test_add_another_word_keeps_name_and_clears_fields(self, authenticated_session):
+        """A consecutive contribution keeps only the contributor name."""
+        data = {
+            'parola': 'RICORDO',
+            'frase_indizio': 'Un momento speciale passato insieme tanti anni fa',
+            'nome': 'Luca Bianchi'
+        }
+
+        response = authenticated_session.post('/', data=data)
+        assert response.status_code == 200
+
+        response = authenticated_session.get('/nuovo-contributo', follow_redirects=True)
+        page_content = response.get_data(as_text=True)
+
+        assert response.status_code == 200
+        assert 'value="Luca Bianchi"' in page_content
+        assert 'value="RICORDO"' not in page_content
+        assert 'Un momento speciale passato insieme tanti anni fa' not in page_content
+
+    def test_logout_clears_contributor_name(self, authenticated_session):
+        """Logging out removes the remembered contributor name."""
+        with authenticated_session.session_transaction() as session_data:
+            session_data['contributor_name'] = 'Luca Bianchi'
+
+        authenticated_session.post('/logout')
+
+        with authenticated_session.session_transaction() as session_data:
+            assert 'contributor_name' not in session_data
 
 class TestErrorHandling:
     """Test error handling and edge cases."""
@@ -490,6 +535,15 @@ class TestSecurityFunctions:
         empty_input = ''
         clean_input = sanitize_input(empty_input)
         assert clean_input == ''
+
+        # Unsafe control characters are removed.
+        assert sanitize_input('Test\x00Word') == 'TestWord'
+
+    def test_csv_formula_sanitization(self):
+        """Spreadsheet formula prefixes are exported as plain text."""
+        assert sanitize_csv_cell('=SUM(1,1)') == "'=SUM(1,1)"
+        assert sanitize_csv_cell('+123') == "'+123"
+        assert sanitize_csv_cell('normal text') == 'normal text'
     
     def test_validation_functions(self):
         """Test validation utility functions."""
@@ -497,12 +551,15 @@ class TestSecurityFunctions:
         assert is_valid_word('HELLO')
         assert is_valid_word('hello')
         assert is_valid_word('Hello World')
-        assert not is_valid_word('Hello123')
-        assert not is_valid_word('Hello!')
+        assert is_valid_word('Hello123')
+        assert is_valid_word('Hello!')
+        assert is_valid_word('🎓 2026')
+        assert not is_valid_word('   ')
         
         # Test clue validation
         assert is_valid_clue('This is a long enough clue')
-        assert not is_valid_clue('Short')
+        assert is_valid_clue('X')
+        assert not is_valid_clue('   ')
 
 class TestAccessControl:
     """Test access control and permissions."""
@@ -531,4 +588,57 @@ class TestAccessControl:
         
         # Delete submission
         response = client.post('/admin/delete/1')
-        assert response.status_code == 403 
+        assert response.status_code == 403
+
+
+class TestProductionHardening:
+    def test_healthcheck(self, client):
+        response = client.get('/healthz')
+        assert response.status_code == 200
+        assert response.get_json() == {'status': 'ok'}
+
+    def test_untrusted_host_is_rejected(self, client):
+        original_hosts = cruciverba_app.config['TRUSTED_HOSTS']
+        cruciverba_app.config['TRUSTED_HOSTS'] = ['localhost']
+        try:
+            response = client.get('/', headers={'Host': 'evil.example'})
+        finally:
+            cruciverba_app.config['TRUSTED_HOSTS'] = original_hosts
+        assert response.status_code == 400
+        assert 'Richiesta non valida' in response.get_data(as_text=True)
+
+    def test_oversized_request_is_rejected(self, authenticated_session):
+        response = authenticated_session.post(
+            '/',
+            data={'parola': 'X' * 17000, 'frase_indizio': 'X', 'nome': 'Test'},
+        )
+        assert response.status_code == 413
+
+    def test_honeypot_does_not_store_submission(self, authenticated_session):
+        import app
+
+        with app.get_db_connection() as connection:
+            count_before = connection.execute('SELECT COUNT(*) FROM submissions').fetchone()[0]
+
+        response = authenticated_session.post(
+            '/',
+            data={
+                'parola': 'BOT',
+                'frase_indizio': 'X',
+                'nome': 'Bot',
+                'website': 'https://spam.example',
+            },
+        )
+
+        with app.get_db_connection() as connection:
+            count_after = connection.execute('SELECT COUNT(*) FROM submissions').fetchone()[0]
+
+        assert response.status_code == 302
+        assert count_after == count_before
+
+    def test_hsts_only_on_secure_requests(self, client, monkeypatch):
+        import app
+
+        monkeypatch.setattr(app, 'https_enabled', True)
+        response = client.get('/healthz', base_url='https://localhost')
+        assert response.headers['Strict-Transport-Security'] == 'max-age=31536000'

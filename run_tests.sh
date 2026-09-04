@@ -62,7 +62,7 @@ run_integration_tests() {
     sleep 10
     
     # Check if app is responding
-    if curl -f http://localhost:8080 >/dev/null 2>&1; then
+    if curl -f http://localhost:5000/healthz >/dev/null 2>&1; then
         print_success "Application is ready"
     else
         print_error "Application failed to start"
@@ -153,4 +153,4 @@ case "${1:-all}" in
         echo "  $0           # Run everything"
         exit 1
         ;;
-esac 
+esac

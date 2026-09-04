@@ -1,50 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}Admin - Cruciverba di laurea per {{ person_name }}{% endblock %}
-
-{% block header %}
-<i class="fas fa-shield-alt me-2"></i>Accesso Amministratore
-{% endblock %}
-
-{% block subheader %}
-<p class="lead mb-0">Inserisci la password per accedere al pannello di amministrazione</p>
-{% endblock %}
+{% block title %}Area organizzatori — Cruciverba per {{ person_name }}{% endblock %}
+{% block header %}Accesso organizzatori{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <form method="POST">
-            {{ form.hidden_tag() }}
-            <div class="mb-4">
-                {{ form.password.label(class="form-label") }}
-                <i class="fas fa-lock me-2"></i>
-                <strong>Password</strong>
-                {{ form.password(class="form-control form-control-lg", placeholder="Inserisci la password", autocomplete="current-password") }}
-                {% if form.password.errors %}
-                    <div class="text-danger mt-1">
-                        {% for error in form.password.errors %}
-                            <small>{{ error }}</small>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-            </div>
-            
-            <div class="text-center">
-                <button type="submit" class="btn btn-primary btn-lg">
-                    <i class="fas fa-sign-in-alt me-2"></i>
-                    Accedi
-                </button>
-            </div>
-        </form>
-        
-        <hr class="my-4">
-        
-        <div class="text-center">
-            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-2"></i>
-                Torna alla pagina principale
-            </a>
+<form method="post" class="narrow-form">
+    {{ form.hidden_tag() }}
+    <div class="field-group">
+        <label for="{{ form.password.id }}">Password</label>
+        <div class="password-field">
+            {{ form.password(class="text-input", placeholder="Password amministratore", autocomplete="current-password", required=true, autofocus=true) }}
+            <button type="button" class="password-toggle" data-password-toggle="{{ form.password.id }}" aria-label="Mostra password" aria-pressed="false">
+                <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/>
+                    <circle cx="12" cy="12" r="2.5"/>
+                </svg>
+                <svg class="eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m3 3 18 18M10.6 6.1c.5-.1.9-.1 1.4-.1 6 0 9.5 6 9.5 6a17 17 0 0 1-2.2 2.8M6.2 6.2A17.7 17.7 0 0 0 2.5 12s3.5 6 9.5 6c1.7 0 3.2-.5 4.5-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/>
+                </svg>
+            </button>
         </div>
+        {% for error in form.password.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
     </div>
-</div>
-{% endblock %} 
+    <button type="submit" class="button button-primary button-full">Accedi al pannello</button>
+</form>
+
+<a href="{{ url_for('index') }}" class="back-link">Torna alla pagina principale</a>
+{% endblock %}

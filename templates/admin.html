@@ -1,130 +1,54 @@
 {% extends "base.html" %}
 
-{% block title %}Admin Dashboard - Cruciverba di laurea per {{ person_name }}{% endblock %}
+{% block title %}Pannello Amministratore — {{ person_name }}{% endblock %}
+{% block body_class %}admin-page{% endblock %}
+{% block header %}Pannello Amministratore{% endblock %}
 
-{% block header %}
-<i class="fas fa-tachometer-alt me-2"></i>Pannello Amministratore
-{% endblock %}
-
-{% block subheader %}
-<p class="lead mb-0">
-    Gestisci i contributi per il cruciverba di {{ person_name }}
-    <span class="badge bg-light text-dark ms-2">{{ submissions|length }} contributi</span>
-</p>
+{% block header_action %}
+<form method="post" action="{{ url_for('admin_logout') }}" class="logout-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="quiet-link logout-link">Esci</button>
+</form>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-2">
-    <h3 class="mb-0">
-        <i class="fas fa-list me-2 text-primary"></i>
-        Tutti i contributi
-    </h3>
-    
-    <div class="d-flex flex-column flex-sm-row gap-2 w-100 w-md-auto">
-        <a href="{{ url_for('export_csv') }}" class="btn btn-success">
-            <i class="fas fa-download me-2"></i>
-            Esporta CSV
-        </a>
-        <a href="{{ url_for('admin_logout') }}" class="btn btn-outline-secondary">
-            <i class="fas fa-sign-out-alt me-2"></i>
-            Logout
-        </a>
+<div class="admin-toolbar">
+    <div>
+        <h2>{{ submissions|length }} {% if submissions|length == 1 %}contributo{% else %}contributi{% endif %}</h2>
     </div>
+    <a href="{{ url_for('export_csv') }}" class="button button-primary">Esporta CSV</a>
 </div>
 
 {% if submissions %}
-<div class="table-responsive">
-    <table class="table table-hover">
-        <thead class="table-dark">
-            <tr>
-                <th><i class="fas fa-font me-1"></i> Parola</th>
-                <th><i class="fas fa-lightbulb me-1"></i> Frase Indizio</th>
-                <th><i class="fas fa-user me-1"></i> Nome</th>
-                <th><i class="fas fa-clock me-1"></i> Data</th>
-                <th><i class="fas fa-cog me-1"></i> Azioni</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for submission in submissions %}
-            <tr>
-                <td>
-                    <strong class="text-primary">{{ submission.parola.upper() }}</strong>
-                </td>
-                <td>
-                    <span class="text-truncate d-inline-block" style="max-width: 300px;" 
-                          title="{{ submission.frase_indizio }}">
-                        {{ submission.frase_indizio }}
-                    </span>
-                </td>
-                <td>
-                    {% if submission.nome %}
-                        <span class="badge bg-info">{{ submission.nome }}</span>
-                    {% else %}
-                        <span class="badge bg-secondary">Anonimo</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <small class="text-muted">
-                        {{ submission.timestamp.split(' ')[0] }}<br>
-                        {{ submission.timestamp.split(' ')[1].split('.')[0] }}
-                    </small>
-                </td>
-                <td>
-                    <form method="POST" action="{{ url_for('delete_submission', submission_id=submission.id) }}" class="d-inline">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <button type="submit" class="btn btn-sm btn-outline-danger mobile-delete-btn"
-                                onclick="return confirm('Sei sicuro di voler eliminare questo contributo: {{ submission.parola.upper() }}?')"
-                                aria-label="Elimina contributo">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="submission-list">
+    {% for submission in submissions %}
+    <article class="submission-card">
+        <div class="submission-word">
+            <span class="submission-index">{{ '%02d'|format(loop.index) }}</span>
+            <strong>{{ submission.parola.upper() }}</strong>
+        </div>
+        <p class="submission-clue">{{ submission.frase_indizio }}</p>
+        <div class="submission-meta">
+            <span>{{ submission.nome or 'Anonimo' }}</span>
+            <time>{{ submission.timestamp.split(' ')[0] }} · {{ submission.timestamp.split(' ')[1].split('.')[0] }}</time>
+        </div>
+        <form method="post" action="{{ url_for('delete_submission', submission_id=submission.id) }}" class="submission-delete">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="delete-button" data-confirm="Eliminare il contributo {{ submission.parola.upper() }}?" aria-label="Elimina {{ submission.parola.upper() }}" title="Elimina">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/>
+                </svg>
+            </button>
+        </form>
+    </article>
+    {% endfor %}
 </div>
 {% else %}
-<div class="text-center py-5">
-    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-    <h4 class="text-muted">Nessun contributo ancora</h4>
-    <p class="text-muted">I contributi degli ospiti appariranno qui quando inizieranno a inviarli.</p>
-    <a href="{{ url_for('index') }}" class="btn btn-primary">
-        <i class="fas fa-plus me-2"></i>
-        Vai alla pagina principale
-    </a>
+<div class="empty-state">
+    <span class="empty-glyph" aria-hidden="true">?</span>
+    <h2>Nessun contributo ancora</h2>
+    <p>Le parole inviate dagli invitati appariranno qui.</p>
+    <a href="{{ url_for('index') }}" class="button button-quiet">Vai alla pagina principale</a>
 </div>
 {% endif %}
-
-<hr class="my-4">
-
-<div class="row">
-    <div class="col-md-4">
-        <div class="card bg-primary text-white">
-            <div class="card-body text-center">
-                <i class="fas fa-puzzle-piece fa-2x mb-2"></i>
-                <h5>{{ submissions|length }}</h5>
-                <small>Contributi Totali</small>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card bg-success text-white">
-            <div class="card-body text-center">
-                <i class="fas fa-users fa-2x mb-2"></i>
-                <h5>{{ submissions|selectattr('nome')|list|length }}</h5>
-                <small>Con Nome</small>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card bg-info text-white">
-            <div class="card-body text-center">
-                <i class="fas fa-user-secret fa-2x mb-2"></i>
-                <h5>{{ submissions|rejectattr('nome')|list|length }}</h5>
-                <small>Anonimi</small>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %} 
+{% endblock %}

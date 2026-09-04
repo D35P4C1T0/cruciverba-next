@@ -1,58 +1,32 @@
 {% extends "base.html" %}
 
-{% block title %}Accesso - Cruciverba di laurea per {{ person_name }}{% endblock %}
-
-{% block header %}
-<i class="fas fa-key me-2"></i>Accesso Richiesto
-{% endblock %}
+{% block title %}Accesso — Cruciverba per {{ person_name }}{% endblock %}
+{% block header %}Cruciverba per {{ person_name }}{% endblock %}
 
 {% block subheader %}
-<p class="lead mb-0">Inserisci la password per accedere al form del cruciverba</p>
+<p>Inserisci la password condivisa dagli organizzatori.</p>
 {% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="text-center mb-4">
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle me-2"></i>
-                Se sei nel gruppo dovresti conoscere la password
-            </div>
+<form method="post" class="narrow-form">
+    {{ form.hidden_tag() }}
+    <div class="field-group">
+        <label for="{{ form.access_password.id }}">Password di accesso</label>
+        <div class="password-field">
+            {{ form.access_password(class="text-input", placeholder="Inserisci la password", autocomplete="current-password", required=true, autofocus=true) }}
+            <button type="button" class="password-toggle" data-password-toggle="{{ form.access_password.id }}" aria-label="Mostra password" aria-pressed="false">
+                <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/>
+                    <circle cx="12" cy="12" r="2.5"/>
+                </svg>
+                <svg class="eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m3 3 18 18M10.6 6.1c.5-.1.9-.1 1.4-.1 6 0 9.5 6 9.5 6a17 17 0 0 1-2.2 2.8M6.2 6.2A17.7 17.7 0 0 0 2.5 12s3.5 6 9.5 6c1.7 0 3.2-.5 4.5-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/>
+                </svg>
+            </button>
         </div>
-
-        <form method="POST">
-            {{ form.hidden_tag() }}
-            <div class="mb-4">
-                {{ form.access_password.label(class="form-label") }}
-                <i class="fas fa-lock me-2"></i>
-                <strong>Password di accesso</strong>
-                {{ form.access_password(class="form-control form-control-lg", placeholder="Inserisci la password", autocomplete="current-password") }}
-                <div class="form-text">Chiedi la password agli organizzatori se non la conosci</div>
-                {% if form.access_password.errors %}
-                    <div class="text-danger mt-1">
-                        {% for error in form.access_password.errors %}
-                            <small>{{ error }}</small>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-            </div>
-            
-            <div class="text-center">
-                <button type="submit" class="btn btn-primary btn-lg">
-                    <i class="fas fa-sign-in-alt me-2"></i>
-                    Accedi al form
-                </button>
-            </div>
-        </form>
-        
-        <hr class="my-4">
-        
-        <div class="text-center">
-            <p class="text-muted">
-                <i class="fas fa-graduation-cap me-1"></i>
-                Questo form raccoglie parole speciali per il cruciverba di laurea di {{ person_name }}
-            </p>
-        </div>
+        <p class="field-help">Non la conosci? Chiedila a chi sta organizzando la festa.</p>
+        {% for error in form.access_password.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
     </div>
-</div>
-{% endblock %} 
+    <button type="submit" class="button button-primary button-full">Accedi e partecipa</button>
+</form>
+{% endblock %}

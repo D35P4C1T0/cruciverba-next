@@ -107,6 +107,7 @@ yarn-error.log*
 # Production secrets
 production.env
 secrets.env
+secrets/
 
 # Local development overrides
 docker-compose.local.yml
@@ -158,4 +159,4 @@ tramp
 [._]*.sw[a-p]
 [._]s[a-rt-v][a-z]
 [._]ss[a-gi-z]
-[._]sw[a-p] 
+[._]sw[a-p]

@@ -42,6 +42,12 @@ Thumbs.db
 # Database (will be created in container)
 *.db
 
+# Secrets must never enter build context
+.env
+.env.*
+!.env.example
+secrets/
+
 # Documentation
 README.md
-*.md 
+*.md

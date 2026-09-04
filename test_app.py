@@ -92,7 +92,7 @@ class TestSecurityHeaders:
         assert 'X-Frame-Options' in response.headers
         assert response.headers['X-XSS-Protection'] == '0'
         assert 'Strict-Transport-Security' not in response.headers
-        assert response.headers['Referrer-Policy'] == 'no-referrer'
+        assert response.headers['Referrer-Policy'] == 'same-origin'
         assert 'Permissions-Policy' in response.headers
         assert response.headers['Cache-Control'] == 'no-store'
         
@@ -620,6 +620,34 @@ class TestProductionHardening:
         response = client.get('/healthz')
         assert response.status_code == 200
         assert response.get_json() == {'status': 'ok'}
+
+    def test_https_csrf_accepts_same_origin_referrer(self, client):
+        import re
+
+        original_csrf_setting = cruciverba_app.config['WTF_CSRF_ENABLED']
+        cruciverba_app.config['WTF_CSRF_ENABLED'] = True
+        try:
+            login_page = client.get('/', base_url='https://localhost')
+            token_match = re.search(
+                r'name="csrf_token"[^>]*value="([^"]+)"',
+                login_page.get_data(as_text=True),
+            )
+            assert token_match
+
+            response = client.post(
+                '/',
+                base_url='https://localhost',
+                headers={'Referer': 'https://localhost/'},
+                data={
+                    'csrf_token': token_match.group(1),
+                    'access_password': get_form_password(),
+                },
+            )
+        finally:
+            cruciverba_app.config['WTF_CSRF_ENABLED'] = original_csrf_setting
+
+        assert response.status_code == 302
+        assert response.headers['Referrer-Policy'] == 'same-origin'
 
     def test_untrusted_host_is_rejected(self, client):
         original_hosts = cruciverba_app.config['TRUSTED_HOSTS']

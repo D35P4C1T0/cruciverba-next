@@ -145,7 +145,9 @@ def set_security_headers(response):
         "img-src 'self' data:; "
         "connect-src 'self'"
     )
-    response.headers["Referrer-Policy"] = "no-referrer"
+    # Flask-WTF's HTTPS CSRF check needs a same-origin Referer on form POSTs.
+    # Do not leak it to other origins.
+    response.headers["Referrer-Policy"] = "same-origin"
     response.headers["Permissions-Policy"] = (
         "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
     )

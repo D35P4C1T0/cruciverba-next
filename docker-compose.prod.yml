@@ -14,6 +14,7 @@ services:
       DATABASE_PATH: data/cruciverba.db
       RATE_LIMIT_STORAGE_URL: redis://rate-limit:6379/0
       FORCE_HTTPS: "True"
+      ALLOW_WEAK_PASSWORDS: ${ALLOW_WEAK_PASSWORDS:-False}
       TRUSTED_HOSTS: ${PUBLIC_HOSTNAME:?Imposta PUBLIC_HOSTNAME nel file .env},localhost,127.0.0.1
       TRUSTED_PROXY_COUNT: ${TRUSTED_PROXY_COUNT:-1}
     env_file:

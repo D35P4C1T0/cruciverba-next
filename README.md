@@ -36,6 +36,7 @@ PUBLIC_HOSTNAME=cruciverba.example.it
 FORM_PASSWORD=una-password-invitati-lunga-e-unica
 ADMIN_PASSWORD=una-password-admin-diversa-e-lunga
 SECRET_KEY=64-caratteri-casuali-generati-con-openssl
+ALLOW_WEAK_PASSWORDS=False
 BIND_ADDRESS=127.0.0.1
 APP_PORT=5000
 TRUSTED_PROXY_COUNT=1
@@ -62,6 +63,17 @@ Configurazione production rifiuta avvio quando:
 - chiave sessione manca, è placeholder o è troppo corta;
 - password sono predefinite, placeholder o più corte di 12 caratteri;
 - HTTPS, host consentiti o rate limiter Redis non sono configurati.
+
+Per accettare consapevolmente password corte, imposta in `.env`:
+
+```env
+ALLOW_WEAK_PASSWORDS=True
+```
+
+Questo disattiva solo il controllo di robustezza di `FORM_PASSWORD` e
+`ADMIN_PASSWORD`. Tutte le altre protezioni restano obbligatorie. L'opzione è
+sconsigliata per un servizio raggiungibile da Internet; il rate limiting riduce
+i tentativi, ma non rende sicura una password debole.
 
 Il nome del festeggiato resta configurabile tramite `CELEBRATED_PERSON_NAME`.
 

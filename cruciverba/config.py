@@ -1,5 +1,6 @@
 """Configurazione applicativa e controlli fail-closed per la produzione."""
 
+import logging
 import os
 import secrets
 from pathlib import Path
@@ -9,6 +10,7 @@ DEFAULT_PERSON_NAME = "Bianca"
 DEFAULT_FORM_PASSWORD = "bianca"
 DEFAULT_ADMIN_PASSWORD = "bianca2024"
 PLACEHOLDER_PARTS = ("cambia-questa", "incolla-qui", "change-me")
+logger = logging.getLogger(__name__)
 
 
 def _read_secret(name, default=None):
@@ -86,6 +88,10 @@ def is_https_forced():
     return os.getenv("FORCE_HTTPS", "False").lower() == "true"
 
 
+def are_weak_passwords_allowed():
+    return os.getenv("ALLOW_WEAK_PASSWORDS", "False").strip().lower() == "true"
+
+
 def _is_weak(value, default):
     normalized = (value or "").lower()
     return (
@@ -117,10 +123,21 @@ def validate_production_config():
         errors.append("FORM_PASSWORD_HASH non è un hash Werkzeug supportato")
     if admin_hash and not _is_supported_password_hash(admin_hash):
         errors.append("ADMIN_PASSWORD_HASH non è un hash Werkzeug supportato")
-    if not form_hash and _is_weak(get_form_password(), DEFAULT_FORM_PASSWORD):
-        errors.append("FORM_PASSWORD deve avere almeno 12 caratteri, oppure usa FORM_PASSWORD_HASH")
-    if not admin_hash and _is_weak(get_admin_password(), DEFAULT_ADMIN_PASSWORD):
-        errors.append("ADMIN_PASSWORD deve avere almeno 12 caratteri, oppure usa ADMIN_PASSWORD_HASH")
+    if are_weak_passwords_allowed():
+        logger.warning(
+            "ALLOW_WEAK_PASSWORDS=True: controllo robustezza password disattivato"
+        )
+    else:
+        if not form_hash and _is_weak(get_form_password(), DEFAULT_FORM_PASSWORD):
+            errors.append(
+                "FORM_PASSWORD deve avere almeno 12 caratteri, oppure usa "
+                "FORM_PASSWORD_HASH o ALLOW_WEAK_PASSWORDS=True"
+            )
+        if not admin_hash and _is_weak(get_admin_password(), DEFAULT_ADMIN_PASSWORD):
+            errors.append(
+                "ADMIN_PASSWORD deve avere almeno 12 caratteri, oppure usa "
+                "ADMIN_PASSWORD_HASH o ALLOW_WEAK_PASSWORDS=True"
+            )
     if get_rate_limit_storage_url() == "memory://":
         errors.append("RATE_LIMIT_STORAGE_URL non può usare memory:// in produzione")
     if not is_https_forced():

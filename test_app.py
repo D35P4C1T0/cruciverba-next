@@ -592,6 +592,30 @@ class TestAccessControl:
 
 
 class TestProductionHardening:
+    def test_weak_passwords_require_explicit_override(self, monkeypatch):
+        from cruciverba.config import validate_production_config
+
+        production_environment = {
+            'APP_ENV': 'production',
+            'SECRET_KEY': 'a' * 64,
+            'FORM_PASSWORD': 'corta',
+            'ADMIN_PASSWORD': 'breve',
+            'RATE_LIMIT_STORAGE_URL': 'redis://rate-limit:6379/0',
+            'FORCE_HTTPS': 'True',
+            'TRUSTED_HOSTS': 'cruciverba.example.it',
+        }
+        for name, value in production_environment.items():
+            monkeypatch.setenv(name, value)
+        monkeypatch.delenv('FORM_PASSWORD_HASH', raising=False)
+        monkeypatch.delenv('ADMIN_PASSWORD_HASH', raising=False)
+        monkeypatch.delenv('ALLOW_WEAK_PASSWORDS', raising=False)
+
+        with pytest.raises(RuntimeError, match='ALLOW_WEAK_PASSWORDS=True'):
+            validate_production_config()
+
+        monkeypatch.setenv('ALLOW_WEAK_PASSWORDS', 'True')
+        validate_production_config()
+
     def test_healthcheck(self, client):
         response = client.get('/healthz')
         assert response.status_code == 200

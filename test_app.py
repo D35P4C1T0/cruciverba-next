@@ -302,10 +302,8 @@ class TestAdminFunctionality:
     def test_csv_export_with_auth(self, admin_session):
         """Test CSV export with authentication."""
         response = admin_session.get('/admin/export')
-        # Should succeed (200) or redirect with error (302)
-        assert response.status_code in [200, 302]
-        if response.status_code == 200:
-            assert response.headers['Content-Type'] == 'text/csv; charset=utf-8'
+        assert response.status_code == 200
+        assert response.headers['Content-Type'] == 'text/csv; charset=utf-8'
     
     def test_csv_export_without_auth(self, client):
         """Test CSV export without authentication."""
@@ -802,3 +800,70 @@ class TestApplicationFactory:
         assert first.get('/').status_code == 200
         assert first.get('/').status_code == 429
         assert second.get('/').status_code == 200
+
+
+class TestPdfDownloads:
+    @pytest.mark.parametrize('authenticated', [False, True])
+    def test_pdf_requires_organizer_access(self, client, authenticated):
+        if authenticated:
+            with client.session_transaction() as session:
+                session['form_access'] = True
+        assert client.get('/admin/export/pdf').status_code == 403
+
+    def test_dashboard_offers_pdf_and_csv(self, admin_session):
+        page = admin_session.get('/admin').get_data(as_text=True)
+        assert 'Scarica PDF' in page and '/admin/export/pdf' in page
+        assert 'Esporta CSV' in page and 'href="/admin/export"' in page
+
+    def test_pdf_download_contains_contribution_and_private_headers(self, admin_session, monkeypatch):
+        import io
+        from pypdf import PdfReader
+
+        monkeypatch.setenv('CELEBRATED_PERSON_NAME', 'Èrica')
+        with get_db_connection() as connection:
+            connection.execute(
+                'INSERT INTO submissions (parola, frase_indizio, nome, timestamp) VALUES (?, ?, ?, ?)',
+                ('caffè', 'È ciò che dà energia: <b>caffè</b> & tè.', 'Zoë', '2026-10-11 12:30:00'),
+            )
+        response = admin_session.get('/admin/export/pdf')
+        assert response.status_code == 200
+        assert response.mimetype == 'application/pdf'
+        assert response.headers['Content-Disposition'] == 'attachment; filename=cruciverba_rica.pdf'
+        assert response.headers['Cache-Control'] == 'no-store'
+        reader = PdfReader(io.BytesIO(response.data))
+        text = '\n'.join(page.extract_text() for page in reader.pages)
+        assert 'Cruciverba di Èrica' in text
+        assert 'CAFFÈ' in text and 'Zoë' in text
+        assert '<b>caffè</b> & tè.' in text
+        assert '11/10/2026 alle 12:30' in text
+        # The original CSV remains downloadable alongside the document.
+        assert admin_session.get('/admin/export').mimetype == 'text/csv'
+
+    @pytest.mark.parametrize('count', [0, 1, 45])
+    def test_empty_and_multipage_documents_preserve_all_entries(self, count):
+        import io
+        from pypdf import PdfReader
+        from cruciverba.exports import create_pdf_bytes
+
+        submissions = [
+            {
+                'parola': f'PAROLA{number:03d}' + 'X' * 40,
+                'frase_indizio': 'Un indizio più lungo, con accenti e simboli < & >. ' * 4,
+                'nome': None,
+                'timestamp': '2026-10-11 12:30:00',
+            }
+            for number in range(count)
+        ]
+        reader = PdfReader(io.BytesIO(create_pdf_bytes(submissions, 'Bianca')))
+        text = '\n'.join(page.extract_text() for page in reader.pages)
+        assert len(reader.pages) >= 1
+        if count == 0:
+            assert 'Nessun contributo ancora' in text
+        for number in range(count):
+            assert f'PAROLA{number:03d}' in text
+        if count:
+            assert 'Anonimo' in text
+        if count == 45:
+            assert len(reader.pages) > 1
+        for number, page in enumerate(reader.pages, start=1):
+            assert f'Pagina {number}' in page.extract_text()

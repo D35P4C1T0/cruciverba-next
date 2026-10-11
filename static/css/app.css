@@ -558,6 +558,12 @@ textarea.text-input {
     margin-bottom: 24px;
 }
 
+.export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
 .admin-toolbar h2 {
     font-size: 1.7rem;
 }

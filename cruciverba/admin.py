@@ -1,9 +1,8 @@
-"""Organizer login, contribution management and CSV export."""
+"""Organizer login, contribution management and downloads."""
 
 import csv
 import io
 import logging
-import re
 
 from flask import (
     abort,
@@ -24,6 +23,7 @@ from cruciverba.config import (
 )
 from cruciverba.database import list_submissions, remove_submission
 from cruciverba.forms import AdminLoginForm
+from cruciverba.exports import create_pdf_bytes, export_filename
 from cruciverba.security import (
     is_failed_login,
     login_rate_limit,
@@ -59,6 +59,26 @@ def export_csv():
         return response
     except Exception:
         logger.exception("Errore durante esportazione CSV")
+        flash("Errore durante l'esportazione", "error")
+        return redirect(url_for("admin"))
+
+
+def export_pdf():
+    if not session.get("admin_logged_in"):
+        abort(403)
+
+    try:
+        person_name = get_celebrated_person_name()
+        content = create_pdf_bytes(list_submissions(), person_name)
+        response = make_response(content)
+        response.headers["Content-Type"] = "application/pdf"
+        response.headers["Content-Disposition"] = (
+            f"attachment; filename={export_filename(person_name, 'pdf')}"
+        )
+        logger.info("PDF esportato da %s", get_remote_address())
+        return response
+    except Exception:
+        logger.exception("Errore durante esportazione PDF")
         flash("Errore durante l'esportazione", "error")
         return redirect(url_for("admin"))
 
@@ -120,15 +140,10 @@ def create_csv_response(submissions):
             ]
         )
 
-    safe_name = re.sub(
-        r"[^a-z0-9_-]+",
-        "_",
-        get_celebrated_person_name().lower(),
-    ).strip("_") or "laurea"
     response = make_response(output_stream.getvalue().encode("utf-8"))
     response.headers["Content-Type"] = "text/csv; charset=utf-8"
     response.headers["Content-Disposition"] = (
-        f"attachment; filename=cruciverba_{safe_name}.csv"
+        f"attachment; filename={export_filename(get_celebrated_person_name(), 'csv')}"
     )
     return response
 
@@ -142,6 +157,7 @@ def register_routes(app, limiter):
     )(admin)
     app.add_url_rule("/admin", view_func=admin_login, methods=["GET", "POST"])
     app.add_url_rule("/admin/export", view_func=export_csv)
+    app.add_url_rule("/admin/export/pdf", view_func=export_pdf)
     app.add_url_rule(
         "/admin/delete/<int:submission_id>", view_func=delete_submission, methods=["POST"],
     )

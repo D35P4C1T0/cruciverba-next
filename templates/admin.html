@@ -16,7 +16,10 @@
     <div>
         <h2>{{ submissions|length }} {% if submissions|length == 1 %}contributo{% else %}contributi{% endif %}</h2>
     </div>
-    <a href="{{ url_for('export_csv') }}" class="button button-primary">Esporta CSV</a>
+    <div class="export-actions">
+        <a href="{{ url_for('export_pdf') }}" class="button button-primary">Scarica PDF</a>
+        <a href="{{ url_for('export_csv') }}" class="button button-quiet">Esporta CSV</a>
+    </div>
 </div>
 
 {% if submissions %}

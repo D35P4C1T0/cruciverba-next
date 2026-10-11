@@ -1,6 +1,6 @@
 # Cruciverba di laurea
 
-Applicazione Flask mobile-first per raccogliere parole e indizi. Accesso invitati e pannello organizzatori separati, SQLite persistente, esportazione CSV.
+Applicazione Flask mobile-first per raccogliere parole e indizi. Accesso invitati e pannello organizzatori separati, SQLite persistente, download PDF leggibile ed esportazione CSV.
 
 ## Configurazione
 
@@ -80,6 +80,12 @@ ADMIN_PASSWORD_FILE=/run/secrets/cruciverba_admin_password
 
 I file hanno precedenza sui valori diretti; gli hash hanno precedenza sulle password in chiaro. Monta i file tramite Docker secrets o bind mount.
 
+## Download dei contributi
+
+Nel pannello organizzatori, **Scarica PDF** crea un documento A4 pronto da leggere o stampare: parole numerate, indizi, autori e date, con pagine aggiunte automaticamente. **Esporta CSV** resta disponibile per lavorare con i dati in un foglio di calcolo. Entrambi i download richiedono l'accesso organizzatore.
+
+Il PDF è generato in memoria: non richiede servizi aggiuntivi né file temporanei sul server.
+
 ## Protezioni applicative
 
 CSRF sulle operazioni mutative, cookie `Secure`/`HttpOnly`/`SameSite=Lax`, sessioni di due ore, host allowlist, proxy trust esplicito e richieste limitate a 16 KiB. Restano CSP, anti-framing, HSTS su HTTPS, escaping Jinja, query SQLite parametrizzate e protezione CSV dalle formule. I log non contengono password o contenuti dei contributi.
@@ -100,7 +106,8 @@ docker compose -p cruciverba-tests -f docker-compose.test.yml --profile test up 
 - `cruciverba/__init__.py`: factory `create_app`, configurazione e registrazione dei componenti.
 - `cruciverba/config.py`: variabili d'ambiente, segreti e controlli di produzione.
 - `cruciverba/contributions.py`: accesso invitati e invio contributi.
-- `cruciverba/admin.py`: accesso organizzatori, elenco, eliminazione ed export CSV.
+- `cruciverba/admin.py`: accesso organizzatori, elenco, eliminazione e download PDF/CSV.
+- `cruciverba/exports.py`: impaginazione del PDF e nomi dei file esportati.
 - `cruciverba/database.py`: connessioni SQLite, schema e query.
 - `cruciverba/security.py`: verifica password, regole rate limiting, header e risposte di errore.
 - `cruciverba/forms.py` e `validation.py`: validazione dei form e pulizia dell'input.

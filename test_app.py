@@ -5,7 +5,10 @@ import sys
 import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app import app as cruciverba_app, get_form_password, get_admin_password, sanitize_csv_cell, sanitize_input, is_valid_word, is_valid_clue, get_db_connection
+from app import app as cruciverba_app
+from cruciverba.config import get_form_password, get_admin_password
+from cruciverba.database import get_db_connection
+from cruciverba.validation import sanitize_csv_cell, sanitize_input, is_valid_word, is_valid_clue
 
 # Global test database
 test_db_path = None
@@ -38,33 +41,17 @@ def test_database():
     os.unlink(test_db_path)
 
 @pytest.fixture
-def client(test_database):
-    """Create a test client for the Flask application."""
-    cruciverba_app.config['TESTING'] = True
-    cruciverba_app.config['WTF_CSRF_ENABLED'] = False
-    
-    # Disable rate limiting for tests
-    from app import limiter
-    limiter.enabled = False
-    
-    # Override the get_db_connection function for testing
-    def get_test_db():
-        conn = sqlite3.connect(test_database)
-        conn.row_factory = sqlite3.Row
-        return conn
-    
-    # Store original function to restore later  
-    import app
-    original_get_db = app.get_db_connection
-    app.get_db_connection = get_test_db
-    
+def client(test_database, monkeypatch):
+    """Use the real database layer with a temporary database and isolated settings."""
+    monkeypatch.setitem(cruciverba_app.config, 'TESTING', True)
+    monkeypatch.setitem(cruciverba_app.config, 'WTF_CSRF_ENABLED', False)
+    monkeypatch.setitem(cruciverba_app.config, 'DATABASE_PATH', test_database)
+    limiter = cruciverba_app.extensions['rate_limiter']
+    monkeypatch.setattr(limiter, 'enabled', False)
+
     with cruciverba_app.test_client() as client:
         with cruciverba_app.app_context():
             yield client
-    
-    # Restore original function and re-enable rate limiting
-    app.get_db_connection = original_get_db
-    limiter.enabled = True
 
 @pytest.fixture
 def authenticated_session(client):
@@ -247,8 +234,7 @@ class TestFormSubmission:
         assert response.status_code == 200
         assert 'Grazie Test User!' in response.get_data(as_text=True)
 
-        import app
-        conn = app.get_db_connection()
+        conn = get_db_connection()
         count = conn.execute(
             'SELECT COUNT(*) FROM submissions WHERE parola = ? AND frase_indizio = ?',
             ('duplicate', data['frase_indizio'])
@@ -329,8 +315,7 @@ class TestAdminFunctionality:
     def test_delete_submission_with_auth(self, admin_session):
         """Test submission deletion with authentication."""
         # First create a submission to delete
-        import app
-        conn = app.get_db_connection()
+        conn = get_db_connection()
         conn.execute('INSERT INTO submissions (parola, frase_indizio, nome) VALUES (?, ?, ?)',
                     ('testdelete', 'test indizio abbastanza lungo', 'Test User'))
         conn.commit()
@@ -354,8 +339,8 @@ class TestRateLimiting:
     
     def test_rate_limiting_configured(self, client):
         """Test that rate limiting is properly configured."""
-        # Verify that the limiter is being used (import from app module)
-        from app import limiter
+        # Verify that the limiter is being used (registered on the application)
+        limiter = cruciverba_app.extensions['rate_limiter']
         assert limiter is not None
         
         # In actual deployment, rate limiting would work
@@ -400,8 +385,7 @@ class TestDatabaseOperations:
         assert 'Grazie Test Storage User!' in response.get_data(as_text=True)
         
         # Verify in database (words are stored in lowercase)
-        import app
-        conn = app.get_db_connection()
+        conn = get_db_connection()
         submission = conn.execute('SELECT * FROM submissions WHERE parola = ? AND nome = ?', 
                                  ('felicita', 'Test Storage User')).fetchone()
         assert submission is not None
@@ -488,8 +472,8 @@ class TestErrorHandling:
     def test_csrf_error_handling(self, client):
         """Test CSRF error handling."""
         # This would need CSRF enabled and proper token testing
-        # For now, verify that CSRF protection exists (import from app module)
-        from app import csrf
+        # For now, verify that CSRF protection exists (registered on the application)
+        csrf = cruciverba_app.extensions['csrf']
         assert csrf is not None
     
     def test_invalid_submission_id(self, admin_session):
@@ -600,7 +584,6 @@ class TestProductionHardening:
             'SECRET_KEY': 'a' * 64,
             'FORM_PASSWORD': 'corta',
             'ADMIN_PASSWORD': 'breve',
-            'RATE_LIMIT_STORAGE_URL': 'redis://rate-limit:6379/0',
             'FORCE_HTTPS': 'True',
             'TRUSTED_HOSTS': 'cruciverba.example.it',
         }
@@ -667,9 +650,8 @@ class TestProductionHardening:
         assert response.status_code == 413
 
     def test_honeypot_does_not_store_submission(self, authenticated_session):
-        import app
 
-        with app.get_db_connection() as connection:
+        with get_db_connection() as connection:
             count_before = connection.execute('SELECT COUNT(*) FROM submissions').fetchone()[0]
 
         response = authenticated_session.post(
@@ -682,15 +664,141 @@ class TestProductionHardening:
             },
         )
 
-        with app.get_db_connection() as connection:
+        with get_db_connection() as connection:
             count_after = connection.execute('SELECT COUNT(*) FROM submissions').fetchone()[0]
 
         assert response.status_code == 302
         assert count_after == count_before
 
     def test_hsts_only_on_secure_requests(self, client, monkeypatch):
-        import app
 
-        monkeypatch.setattr(app, 'https_enabled', True)
+        monkeypatch.setitem(cruciverba_app.config, 'SESSION_COOKIE_SECURE', True)
         response = client.get('/healthz', base_url='https://localhost')
         assert response.headers['Strict-Transport-Security'] == 'max-age=31536000'
+
+
+class TestLeanRateLimiting:
+    @pytest.fixture
+    def limited_client(self, client, monkeypatch):
+        limiter = cruciverba_app.extensions['rate_limiter']
+
+        monkeypatch.setenv('RATE_LIMIT_DEFAULT', '120 per minute')
+        monkeypatch.setenv('RATE_LIMIT_LOGIN', '10 per minute')
+        limiter.storage.reset()
+        limiter.enabled = True
+        yield client
+        limiter.storage.reset()
+
+    @pytest.mark.parametrize('path,field', [('/', 'access_password'), ('/admin', 'password')])
+    def test_failed_password_attempts_are_limited(self, limited_client, path, field):
+        for _ in range(10):
+            assert limited_client.post(path, data={field: 'wrong'}).status_code == 200
+        assert limited_client.post(path, data={field: 'wrong'}).status_code == 429
+
+    @pytest.mark.parametrize('path,field,password', [
+        ('/', 'access_password', get_form_password),
+        ('/admin', 'password', get_admin_password),
+    ])
+    def test_successful_logins_do_not_consume_failure_quota(
+        self, limited_client, path, field, password,
+    ):
+        for _ in range(12):
+            assert limited_client.post(path, data={field: password()}).status_code == 302
+        assert limited_client.post(path, data={field: 'wrong'}).status_code == 200
+
+    def test_contributions_do_not_consume_login_quota(self, limited_client):
+        with limited_client.session_transaction() as session:
+            session['form_access'] = True
+        for _ in range(12):
+            # Invalid contribution renders the form; it is still not a password attempt.
+            assert limited_client.post('/', data={'parola': ''}).status_code == 200
+        assert limited_client.post('/', data={'access_password': 'wrong'}).status_code == 200
+
+    def test_general_limit_is_configurable_and_health_is_exempt(self, limited_client, monkeypatch):
+        monkeypatch.setenv('RATE_LIMIT_DEFAULT', '3 per minute')
+        for _ in range(3):
+            assert limited_client.get('/').status_code == 200
+        assert limited_client.get('/').status_code == 429
+        for _ in range(4):
+            assert limited_client.get('/healthz').status_code == 200
+
+
+class TestLeanDeployment:
+    def test_production_accepts_memory_storage_with_valid_secrets(self, monkeypatch):
+        from cruciverba.config import validate_production_config
+
+        for name, value in {
+            'APP_ENV': 'production',
+            'SECRET_KEY': 'a' * 64,
+            'FORM_PASSWORD': 'strong-guest-password',
+            'ADMIN_PASSWORD': 'strong-admin-password',
+            'FORCE_HTTPS': 'True',
+            'TRUSTED_HOSTS': 'cruciverba.example.it',
+        }.items():
+            monkeypatch.setenv(name, value)
+        validate_production_config()
+
+    def test_gunicorn_requires_one_worker_for_memory_rate_limiting(self, monkeypatch):
+        import runpy
+        from pathlib import Path
+        from types import SimpleNamespace
+
+        monkeypatch.setenv('WEB_CONCURRENCY', '2')
+        monkeypatch.setenv('GUNICORN_THREADS', '4')
+        config = runpy.run_path(str(Path(__file__).with_name('gunicorn.conf.py')))
+        assert config['workers'] == 1
+        assert config['threads'] == 4
+        start = config['on_starting']
+        start(SimpleNamespace(cfg=SimpleNamespace(workers=1)))
+        with pytest.raises(RuntimeError, match='un solo worker'):
+            start(SimpleNamespace(cfg=SimpleNamespace(workers=2)))
+
+
+class TestApplicationFactory:
+    def test_apps_keep_database_sessions_and_settings_separate(self, tmp_path, monkeypatch):
+        from cruciverba import create_app
+        from cruciverba.database import add_submission, init_db, list_submissions
+
+        monkeypatch.setenv('APP_ENV', 'testing')
+        monkeypatch.setenv('FORCE_HTTPS', 'False')
+        monkeypatch.setenv('TRUSTED_PROXY_COUNT', '0')
+        settings = {
+            'TESTING': True,
+            'WTF_CSRF_ENABLED': False,
+            'RATELIMIT_ENABLED': False,
+            'TRUSTED_HOSTS': ['localhost'],
+        }
+        first = create_app(dict(settings, SECRET_KEY='first-secret', DATABASE_PATH=str(tmp_path / 'first.db')))
+        second = create_app(dict(settings, SECRET_KEY='second-secret', DATABASE_PATH=str(tmp_path / 'second.db')))
+
+        with first.app_context():
+            init_db()
+            add_submission('ciao', 'Un saluto', 'Mario')
+            assert len(list_submissions()) == 1
+        with second.app_context():
+            init_db()
+            assert list_submissions() == []
+
+        assert first.extensions['rate_limiter'] is not second.extensions['rate_limiter']
+        assert first.extensions['csrf'] is not second.extensions['csrf']
+        first_client = first.test_client()
+        second_client = second.test_client()
+        assert first_client.post('/', data={'access_password': get_form_password()}).status_code == 302
+        cookie = first_client.get_cookie('cruciverba_session')
+        second_client.set_cookie('cruciverba_session', cookie.value)
+        assert 'Password di accesso' in second_client.get('/').get_data(as_text=True)
+        with first_client.session_transaction() as session:
+            assert session['form_access']
+        assert first_client.get('/static/css/app.css').status_code == 200
+
+    def test_app_limiters_do_not_share_request_counters(self, monkeypatch):
+        from cruciverba import create_app
+
+        monkeypatch.setenv('APP_ENV', 'testing')
+        monkeypatch.setenv('RATE_LIMIT_DEFAULT', '1 per minute')
+        settings = {'TESTING': True, 'RATELIMIT_ENABLED': True, 'TRUSTED_HOSTS': ['localhost']}
+        first = create_app(settings).test_client()
+        second = create_app(settings).test_client()
+        assert first.get('/').status_code == 200
+        assert first.get('/').status_code == 429
+        assert second.get('/').status_code == 200

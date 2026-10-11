@@ -3,6 +3,7 @@
 import logging
 import os
 import secrets
+from datetime import timedelta
 from pathlib import Path
 
 
@@ -62,10 +63,6 @@ def get_celebrated_person_name():
 
 def get_database_path():
     return os.getenv("DATABASE_PATH", "data/cruciverba.db")
-
-
-def get_rate_limit_storage_url():
-    return os.getenv("RATE_LIMIT_STORAGE_URL", "memory://")
 
 
 def get_trusted_hosts():
@@ -138,8 +135,6 @@ def validate_production_config():
                 "ADMIN_PASSWORD deve avere almeno 12 caratteri, oppure usa "
                 "ADMIN_PASSWORD_HASH o ALLOW_WEAK_PASSWORDS=True"
             )
-    if get_rate_limit_storage_url() == "memory://":
-        errors.append("RATE_LIMIT_STORAGE_URL non può usare memory:// in produzione")
     if not is_https_forced():
         errors.append("FORCE_HTTPS deve essere True in produzione")
     if not get_trusted_hosts():
@@ -147,3 +142,31 @@ def validate_production_config():
 
     if errors:
         raise RuntimeError("Configurazione di produzione non sicura: " + "; ".join(errors))
+
+
+def get_app_settings():
+    """Build Flask settings from the environment in one place."""
+    https_enabled = is_https_forced()
+    csrf_enabled = is_production() or os.getenv("WTF_CSRF_ENABLED", "True").lower() == "true"
+    rate_limiting_enabled = (
+        is_production() or os.getenv("RATELIMIT_ENABLED", "True").lower() == "true"
+    )
+    return dict(
+        SECRET_KEY=get_secret_key(),
+        WTF_CSRF_TIME_LIMIT=3600,
+        WTF_CSRF_SSL_STRICT=True,
+        WTF_CSRF_ENABLED=csrf_enabled,
+        RATELIMIT_ENABLED=rate_limiting_enabled,
+        SESSION_COOKIE_NAME="__Host-cruciverba_session" if https_enabled else "cruciverba_session",
+        SESSION_COOKIE_SECURE=https_enabled,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_PATH="/",
+        SESSION_REFRESH_EACH_REQUEST=False,
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=2),
+        MAX_CONTENT_LENGTH=16 * 1024,
+        MAX_FORM_MEMORY_SIZE=16 * 1024,
+        MAX_FORM_PARTS=10,
+        TRUSTED_HOSTS=get_trusted_hosts(),
+        PREFERRED_URL_SCHEME="https" if https_enabled else "http",
+    )

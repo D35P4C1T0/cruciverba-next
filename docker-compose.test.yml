@@ -25,11 +25,11 @@ services:
     volumes:
       - .:/app
     environment:
-      - BASE_URL=http://cruciverba-app:5000
+      - BASE_URL=http://cruciverba:5000
       - FORM_PASSWORD=bianca
       - ADMIN_PASSWORD=bianca2024
     depends_on:
-      cruciverba-app:
+      cruciverba:
         condition: service_healthy
     networks:
       - default
@@ -38,7 +38,7 @@ services:
       - integration
 
   # Include the main app for integration tests
-  cruciverba-app:
+  cruciverba:
     build: .
     volumes:
       - test_data:/app/data
@@ -51,9 +51,8 @@ services:
       - SECRET_KEY=test-secret-key-at-least-thirty-two-characters
       - FORM_PASSWORD=bianca
       - ADMIN_PASSWORD=bianca2024
-      - RATE_LIMIT_STORAGE_URL=memory://
       - FORCE_HTTPS=False
-      - TRUSTED_HOSTS=localhost,127.0.0.1,cruciverba-app
+      - TRUSTED_HOSTS=localhost,127.0.0.1,cruciverba
     restart: "no"
     profiles:
       - integration

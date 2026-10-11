@@ -1,9 +1,9 @@
-"""Entrypoint WSGI usato da Gunicorn."""
+"""Production WSGI entrypoint used by Gunicorn."""
 
-from app import app, init_db
-from cruciverba.config import validate_production_config
+from app import app
+from cruciverba.database import init_db
 
+with app.app_context():
+    init_db()
 
-validate_production_config()
-init_db()
 application = app

@@ -32,8 +32,7 @@ print_info() {
 # Cleanup function
 cleanup() {
     print_info "Cleaning up test containers..."
-    docker-compose -f docker-compose.test.yml down --remove-orphans 2>/dev/null || true
-    docker-compose down 2>/dev/null || true
+    docker compose -p cruciverba-tests -f docker-compose.test.yml down --remove-orphans 2>/dev/null || true
 }
 
 # Trap cleanup on script exit
@@ -41,10 +40,10 @@ trap cleanup EXIT
 
 run_unit_tests() {
     print_info "Building test environment..."
-    docker-compose -f docker-compose.test.yml build test-runner
+    docker compose -p cruciverba-tests -f docker-compose.test.yml build test-runner
     
     print_info "Running unit tests..."
-    if docker-compose -f docker-compose.test.yml run --rm test-runner; then
+    if docker compose -p cruciverba-tests -f docker-compose.test.yml run --rm test-runner; then
         print_success "Unit tests passed!"
         return 0
     else
@@ -54,27 +53,11 @@ run_unit_tests() {
 }
 
 run_integration_tests() {
-    print_info "Starting application for integration tests..."
-    docker-compose up -d
-    
-    # Wait for app to be ready
-    print_info "Waiting for application to be ready..."
-    sleep 10
-    
-    # Check if app is responding
-    if curl -f http://localhost:5000/healthz >/dev/null 2>&1; then
-        print_success "Application is ready"
-    else
-        print_error "Application failed to start"
-        docker-compose logs cruciverba-app
-        return 1
-    fi
-    
     print_info "Building integration test environment..."
-    docker-compose -f docker-compose.test.yml build integration-test
-    
+    docker compose -p cruciverba-tests -f docker-compose.test.yml --profile integration up --build -d --wait cruciverba
+
     print_info "Running integration tests..."
-    if docker-compose -f docker-compose.test.yml --profile integration run --rm integration-test; then
+    if docker compose -p cruciverba-tests -f docker-compose.test.yml --profile integration run --rm integration-test; then
         print_success "Integration tests passed!"
         return 0
     else
@@ -85,9 +68,9 @@ run_integration_tests() {
 
 run_coverage_tests() {
     print_info "Running tests with coverage..."
-    docker-compose -f docker-compose.test.yml build test-runner
+    docker compose -p cruciverba-tests -f docker-compose.test.yml build test-runner
     
-    if docker-compose -f docker-compose.test.yml run --rm test-runner \
+    if docker compose -p cruciverba-tests -f docker-compose.test.yml run --rm test-runner \
         python -m pytest test_app.py -v --cov=app --cov-report=term-missing --cov-report=html; then
         print_success "Coverage tests completed!"
         print_info "Coverage report generated in htmlcov/ directory"

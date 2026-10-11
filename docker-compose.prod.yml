@@ -1,71 +1,24 @@
 services:
-  cruciverba-app:
-    build:
-      context: .
-      target: production
-    image: cruciverba-nexus-app:production
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-5000}:5000"
-    volumes:
-      - cruciverba_data:/app/data
+  cruciverba:
+    image: ${APP_IMAGE:-cruciverba:local}
+    build: .
+    container_name: ${CONTAINER_NAME:-cruciverba}
+    restart: unless-stopped
+    env_file: .env
     environment:
       APP_ENV: production
-      CELEBRATED_PERSON_NAME: ${CELEBRATED_PERSON_NAME:-Bianca}
-      DATABASE_PATH: data/cruciverba.db
-      RATE_LIMIT_STORAGE_URL: redis://rate-limit:6379/0
       FORCE_HTTPS: "True"
-      ALLOW_WEAK_PASSWORDS: ${ALLOW_WEAK_PASSWORDS:-False}
       TRUSTED_HOSTS: ${PUBLIC_HOSTNAME:?Imposta PUBLIC_HOSTNAME nel file .env},localhost,127.0.0.1
       TRUSTED_PROXY_COUNT: ${TRUSTED_PROXY_COUNT:-1}
-    env_file:
-      - .env
-    depends_on:
-      rate-limit:
-        condition: service_healthy
-    restart: unless-stopped
-    init: true
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,size=32m
-    pids_limit: 100
-    mem_limit: 256m
-    cpus: 1.0
-    stop_grace_period: 30s
+    volumes:
+      - cruciverba_data:/app/data
     networks:
-      - frontend
-      - backend
-
-  rate-limit:
-    image: redis:8.10.0-alpine
-    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
-    user: "999:999"
-    restart: unless-stopped
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /data:rw,noexec,nosuid,nodev,size=64m,mode=1777
-    pids_limit: 50
-    mem_limit: 96m
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - backend
+      - traefik
 
 volumes:
   cruciverba_data:
 
 networks:
-  frontend:
-    name: cruciverba_frontend
-  backend:
-    internal: true
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik}
+    external: true

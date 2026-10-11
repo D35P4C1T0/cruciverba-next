@@ -70,12 +70,12 @@ health: ## Check application health
 
 logs: ## Show application logs
 	@echo "$(BLUE)📋 Application logs:$(NC)"
-	@docker-compose logs -f cruciverba-app 2>/dev/null || \
-	 docker-compose -f docker-compose.prod.yml logs -f cruciverba-app
+	@docker compose logs -f cruciverba 2>/dev/null || \
+	 docker compose -f docker-compose.prod.yml logs -f cruciverba
 
 logs-test: ## Show test logs
 	@echo "$(BLUE)📋 Test logs:$(NC)"
-	@docker-compose -f docker-compose.prod.yml logs cruciverba-tests
+	@docker compose -f docker-compose.test.yml logs test-runner
 
 quick-test: ## Quick unit tests only (for development)
 	@echo "$(BLUE)⚡ Quick unit tests...$(NC)"

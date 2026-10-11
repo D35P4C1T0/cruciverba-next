@@ -1,0 +1,15 @@
+# Optional container restrictions and resource limits.
+services:
+  cruciverba:
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 1.0
+    stop_grace_period: 30s

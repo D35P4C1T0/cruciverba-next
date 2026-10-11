@@ -51,7 +51,7 @@ RUN addgroup --gid 10001 appgroup \
     && mkdir -p /app/data \
     && chown -R appuser:appgroup /app
 
-COPY --from=test-stage --chown=appuser:appgroup /app/app.py /app/wsgi.py ./
+COPY --from=test-stage --chown=appuser:appgroup /app/app.py /app/wsgi.py /app/gunicorn.conf.py ./
 COPY --from=test-stage --chown=appuser:appgroup /app/cruciverba/ ./cruciverba/
 COPY --from=test-stage --chown=appuser:appgroup /app/templates/ ./templates/
 COPY --from=test-stage --chown=appuser:appgroup /app/static/ ./static/
@@ -62,4 +62,4 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/healthz', timeout=3)"]
 
-CMD ["gunicorn", "--bind=0.0.0.0:5000", "--workers=2", "--threads=2", "--timeout=30", "--graceful-timeout=30", "--worker-tmp-dir=/tmp", "--no-control-socket", "--access-logfile=-", "--error-logfile=-", "--preload", "wsgi:application"]
+CMD ["gunicorn", "--config=gunicorn.conf.py", "wsgi:application"]

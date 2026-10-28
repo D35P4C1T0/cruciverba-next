@@ -28,7 +28,7 @@ def verify_password(candidate, plain_password, password_hash):
         except (TypeError, ValueError):
             logger.error("Hash password configurato in modo non valido")
             return False
-    return secrets.compare_digest(candidate, plain_password)
+    return secrets.compare_digest(candidate.encode("utf-8"), plain_password.encode("utf-8"))
 
 
 def set_security_headers(response):

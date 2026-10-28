@@ -276,8 +276,6 @@ def run_integration_tests():
     print("🔍 Running Integration Tests for Cruciverba Nexus")
     print("=" * 60)
     print(f"Target URL: {BASE_URL}")
-    print(f"Form Password: {FORM_PASSWORD}")
-    print(f"Admin Password: {ADMIN_PASSWORD}")
     print()
     
     # Check if server is running

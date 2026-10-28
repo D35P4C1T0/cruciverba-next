@@ -1,7 +1,7 @@
 # Cruciverba Nexus - Makefile with Mandatory Testing
 # All builds require passing tests
 
-.PHONY: help test build dev prod clean ci health logs
+.PHONY: help test build dev prod clean ci health logs dev-setup
 
 # Default target
 .DEFAULT_GOAL := help
@@ -40,11 +40,11 @@ build: test ## Build production image (tests required)
 
 dev: ## Start development environment (tests run during build)
 	@echo "$(BLUE)🛠️  Starting development environment...$(NC)"
-	@./scripts/build-with-tests.sh development
+	@docker compose up --build -d
 
-prod: build ## Deploy to production (full pipeline)
+prod: ## Deploy to production (tests run during build)
+	@docker compose -f docker-compose.prod.yml up --build -d
 	@echo "$(GREEN)🚀 Production deployment completed!$(NC)"
-	@echo "$(YELLOW)Application available at: http://localhost:5000$(NC)"
 
 ci: ## Run CI/CD pipeline (test + build)
 	@echo "$(BLUE)🔄 Running CI/CD pipeline...$(NC)"
@@ -94,7 +94,7 @@ security-scan: ## Run security scan on production image
 benchmark: ## Run performance benchmarks
 	@echo "$(BLUE)⚡ Running performance benchmarks...$(NC)"
 	@echo "Starting application..."
-	@make prod >/dev/null 2>&1 &
+	@$(MAKE) dev >/dev/null 2>&1 &
 	@sleep 15
 	@echo "Running load test..."
 	@curl -o /dev/null -s -w "Response time: %{time_total}s\nStatus: %{http_code}\n" http://localhost:5000/healthz
@@ -115,7 +115,7 @@ quality-gate: test security-scan ## Run all quality gates
 # Development workflow
 dev-setup: ## Set up development environment
 	@echo "$(BLUE)🛠️  Setting up development environment...$(NC)"
-	@cp .env.example .env 2>/dev/null || echo "No .env.example found"
+	@if [ ! -e .env ]; then cp .env.example .env; fi
 	@mkdir -p data
 	@chmod +x scripts/build-with-tests.sh
 	@chmod +x run_tests.sh

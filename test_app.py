@@ -100,6 +100,20 @@ class TestSecurityHeaders:
 
 class TestAuthentication:
     """Test authentication mechanisms."""
+
+    @pytest.mark.parametrize('path,field,password_env', [
+        ('/', 'access_password', 'FORM_PASSWORD'),
+        ('/admin', 'password', 'ADMIN_PASSWORD'),
+    ])
+    def test_unicode_plaintext_passwords(self, client, monkeypatch, path, field, password_env):
+        monkeypatch.setenv(password_env, 'caffè-sicuro-2026')
+        monkeypatch.delenv(f'{password_env}_FILE', raising=False)
+        monkeypatch.delenv(f'{password_env}_HASH', raising=False)
+        monkeypatch.delenv(f'{password_env}_HASH_FILE', raising=False)
+        response = client.post(path, data={field: 'caffè-sbagliato'})
+        assert response.status_code == 200
+        assert 'Password errata' in response.get_data(as_text=True)
+        assert client.post(path, data={field: 'caffè-sicuro-2026'}).status_code == 302
     
     def test_form_access_requires_password(self, client):
         """Test that form access requires password."""
@@ -499,6 +513,20 @@ class TestConfigurationAndEnvironment:
 
 class TestSecurityFunctions:
     """Test security utility functions."""
+
+    def test_integration_runner_does_not_print_passwords(self, monkeypatch, capsys):
+        import subprocess
+        from types import SimpleNamespace
+        import test_integration
+
+        monkeypatch.setattr(test_integration, 'FORM_PASSWORD', 'private-guest-password')
+        monkeypatch.setattr(test_integration, 'ADMIN_PASSWORD', 'private-admin-password')
+        monkeypatch.setattr(test_integration.requests, 'get', lambda *args, **kwargs: SimpleNamespace(status_code=200))
+        monkeypatch.setattr(subprocess, 'run', lambda *args, **kwargs: SimpleNamespace(returncode=0))
+        assert test_integration.run_integration_tests()
+        output = capsys.readouterr().out
+        assert 'private-guest-password' not in output
+        assert 'private-admin-password' not in output
     
     def test_sanitize_input(self):
         """Test input sanitization function."""
@@ -722,6 +750,52 @@ class TestLeanRateLimiting:
 
 
 class TestLeanDeployment:
+    @pytest.mark.parametrize('existing_env', [False, True])
+    def test_dev_setup_preserves_existing_configuration(self, tmp_path, existing_env):
+        import shutil
+        import subprocess
+        from pathlib import Path
+
+        if not shutil.which('make'):
+            pytest.skip('make is not installed')
+        root = Path(__file__).parent
+        shutil.copy(root / 'Makefile', tmp_path)
+        (tmp_path / 'scripts').mkdir()
+        for filename in ('.env.example', 'run_tests.sh', 'scripts/build-with-tests.sh'):
+            shutil.copy(root / filename, tmp_path / filename)
+        if existing_env:
+            (tmp_path / '.env').write_text('SECRET_KEY=keep-this-key\n')
+        expected = (tmp_path / ('.env' if existing_env else '.env.example')).read_bytes()
+        subprocess.run(['make', 'dev-setup'], cwd=tmp_path, check=True, capture_output=True)
+        assert (tmp_path / '.env').read_bytes() == expected
+
+    @pytest.mark.parametrize('target,compose_args', [
+        ('dev', 'compose up --build -d'),
+        ('prod', 'compose -f docker-compose.prod.yml up --build -d'),
+    ])
+    @pytest.mark.parametrize('exit_code', [0, 1])
+    def test_deployment_starts_compose_and_propagates_failure(
+        self, tmp_path, monkeypatch, target, compose_args, exit_code,
+    ):
+        import shutil
+        import subprocess
+        from pathlib import Path
+
+        if not shutil.which('make'):
+            pytest.skip('make is not installed')
+        docker = tmp_path / 'docker'
+        docker.write_text(f'#!/bin/sh\necho "$*"\nexit {exit_code}\n')
+        docker.chmod(0o755)
+        monkeypatch.setenv('PATH', f'{tmp_path}{os.pathsep}{os.environ["PATH"]}')
+        result = subprocess.run(
+            ['make', '-f', str(Path(__file__).with_name('Makefile')), target],
+            cwd=tmp_path, capture_output=True, text=True,
+        )
+        assert compose_args in result.stdout
+        assert (result.returncode == 0) == (exit_code == 0)
+        if target == 'prod':
+            assert ('deployment completed' in result.stdout) == (exit_code == 0)
+
     def test_production_accepts_memory_storage_with_valid_secrets(self, monkeypatch):
         from cruciverba.config import validate_production_config
 

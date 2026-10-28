@@ -48,6 +48,8 @@
     if (!form) return;
 
     form.addEventListener("submit", (event) => {
+        if (event.submitter?.formNoValidate) return;
+
         if (document.getElementById("website")?.value) {
             event.preventDefault();
             return;

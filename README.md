@@ -86,6 +86,14 @@ Nel pannello organizzatori, **Scarica PDF** crea un documento A4 pronto da legge
 
 Il PDF è generato in memoria: non richiede servizi aggiuntivi né file temporanei sul server.
 
+I font GNU Unifont inclusi coprono anche emoji monocromatiche e caratteri non latini.
+Le sequenze emoji vengono rese come singoli simboli; i caratteri senza un glifo
+incluso sono indicati esplicitamente come `[U+XXXX]`, senza sparire dal documento.
+Provenienza e licenze sono in `cruciverba/fonts/`.
+
+Dashboard, PDF e CSV mostrano le date nel fuso `Europe/Rome`, con indicazione
+CET o CEST. Il database continua a conservare gli orari in UTC.
+
 ## Protezioni applicative
 
 CSRF sulle operazioni mutative, cookie `Secure`/`HttpOnly`/`SameSite=Lax`, sessioni di due ore, host allowlist, proxy trust esplicito e richieste limitate a 16 KiB. Restano CSP, anti-framing, HSTS su HTTPS, escaping Jinja, query SQLite parametrizzate e protezione CSV dalle formule. I log non contengono password o contenuti dei contributi.

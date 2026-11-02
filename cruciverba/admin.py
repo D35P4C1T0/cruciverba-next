@@ -22,6 +22,7 @@ from cruciverba.config import (
     get_celebrated_person_name,
 )
 from cruciverba.database import list_submissions, remove_submission
+from cruciverba.dates import display_datetime
 from cruciverba.forms import AdminLoginForm
 from cruciverba.exports import create_pdf_bytes, export_filename
 from cruciverba.security import (
@@ -136,7 +137,7 @@ def create_csv_response(submissions):
                 sanitize_csv_cell(submission["parola"]),
                 sanitize_csv_cell(submission["frase_indizio"]),
                 sanitize_csv_cell(submission["nome"] or "Anonimo"),
-                submission["timestamp"],
+                display_datetime(submission["timestamp"]),
             ]
         )
 

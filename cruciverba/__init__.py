@@ -18,6 +18,7 @@ from cruciverba.config import (
     get_trusted_proxy_count,
     validate_production_config,
 )
+from cruciverba.dates import display_datetime
 from cruciverba.security import default_rate_limit, register_security_handlers
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -38,6 +39,7 @@ def create_app(config=None):
     )
     app.config.update(get_app_settings(), DATABASE_PATH=get_database_path())
     app.config.update(config or {})
+    app.add_template_filter(display_datetime, "local_datetime")
 
     proxy_count = get_trusted_proxy_count()
     if proxy_count:

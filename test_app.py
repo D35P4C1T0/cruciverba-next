@@ -259,44 +259,38 @@ class TestFormSubmission:
 class TestInputSanitization:
     """Test input sanitization and XSS prevention."""
     
-    def test_xss_prevention_in_parola(self, authenticated_session):
-        """Test XSS prevention in parola field."""
-        data = {
-            'parola': '<script>alert("xss")</script>TEST',
-            'frase_indizio': 'Una frase indizio molto lunga per test XSS',
-            'nome': 'Test'
-        }
-        
+    @pytest.mark.parametrize('field', ['parola', 'frase_indizio', 'nome'])
+    def test_markup_is_stored_as_text_and_escaped(self, authenticated_session, field):
+        from markupsafe import escape
+
+        payload = '<script>alert("xss")</script>'
+        data = {'parola': 'TEST', 'frase_indizio': 'Un indizio', 'nome': 'Test'}
+        data[field] = payload
         response = authenticated_session.post('/', data=data)
-        page_content = response.get_data(as_text=True)
-        # Check that malicious script content is not present in user data areas
-        assert 'alert("xss")' not in page_content
-    
-    def test_xss_prevention_in_frase_indizio(self, authenticated_session):
-        """Test XSS prevention in frase_indizio field."""
+        assert response.status_code == 200
+        assert 'Grazie' in response.get_data(as_text=True)
+        with get_db_connection() as connection:
+            saved = connection.execute('SELECT * FROM submissions ORDER BY id DESC LIMIT 1').fetchone()
+        assert saved[field] == (payload.lower() if field == 'parola' else payload)
+        with authenticated_session.session_transaction() as session:
+            session['admin_logged_in'] = True
+        dashboard = authenticated_session.get('/admin').get_data(as_text=True)
+        assert str(escape(payload.upper() if field == 'parola' else payload)) in dashboard
+        assert '<script>alert' not in dashboard
+
+    def test_angle_brackets_and_entities_survive_submission(self, authenticated_session):
         data = {
-            'parola': 'TEST',
-            'frase_indizio': '<script>alert("xss")</script>Una frase indizio molto lunga',
-            'nome': 'Test'
+            'parola': '<Bianca>',
+            'frase_indizio': 'Ricorda <Bianca> sempre &lt;3',
+            'nome': 'Mario <Rossi>',
         }
-        
         response = authenticated_session.post('/', data=data)
-        page_content = response.get_data(as_text=True)
-        # Check that malicious script content is not present in user data areas
-        assert 'alert("xss")' not in page_content
-    
-    def test_xss_prevention_in_nome(self, authenticated_session):
-        """Test XSS prevention in nome field."""
-        data = {
-            'parola': 'TEST',
-            'frase_indizio': 'Una frase indizio molto lunga per test',
-            'nome': '<script>alert("xss")</script>TestUser'
-        }
-        
-        response = authenticated_session.post('/', data=data)
-        page_content = response.get_data(as_text=True)
-        # Check that malicious script content is not present in user data areas
-        assert 'alert("xss")' not in page_content
+        assert 'Grazie Mario &lt;Rossi&gt;!' in response.get_data(as_text=True)
+        with get_db_connection() as connection:
+            saved = connection.execute('SELECT * FROM submissions ORDER BY id DESC LIMIT 1').fetchone()
+        assert saved['parola'] == '<bianca>'
+        assert saved['frase_indizio'] == data['frase_indizio']
+        assert saved['nome'] == data['nome']
 
 class TestAdminFunctionality:
     """Test admin panel functionality."""
@@ -530,11 +524,10 @@ class TestSecurityFunctions:
     
     def test_sanitize_input(self):
         """Test input sanitization function."""
-        # Test HTML removal
+        # Input is plain text; HTML escaping belongs at the output boundary.
         dirty_input = '<script>alert("xss")</script>Hello'
-        clean_input = sanitize_input(dirty_input)
-        assert '<script>' not in clean_input
-        assert 'Hello' in clean_input
+        assert sanitize_input(dirty_input) == dirty_input
+        assert sanitize_input(' Ricorda <Bianca> &lt;3 ') == 'Ricorda <Bianca> &lt;3'
         
         # Test normal text
         normal_input = 'Normal text input'
@@ -602,6 +595,50 @@ class TestAccessControl:
 
 
 class TestProductionHardening:
+    @pytest.fixture
+    def production_environment(self, monkeypatch):
+        for name, value in {
+            'APP_ENV': 'production',
+            'SECRET_KEY': 'a' * 64,
+            'FORM_PASSWORD': 'strong-guest-password',
+            'ADMIN_PASSWORD': 'strong-admin-password',
+            'FORCE_HTTPS': 'True',
+            'TRUSTED_HOSTS': 'cruciverba.example.it',
+            'ALLOW_WEAK_PASSWORDS': 'True',
+        }.items():
+            monkeypatch.setenv(name, value)
+        for name in ('FORM_PASSWORD', 'ADMIN_PASSWORD'):
+            for suffix in ('_FILE', '_HASH', '_HASH_FILE'):
+                monkeypatch.delenv(name + suffix, raising=False)
+
+    @pytest.mark.parametrize('name,default', [
+        ('FORM_PASSWORD', 'bianca'), ('ADMIN_PASSWORD', 'bianca2024'),
+    ])
+    @pytest.mark.parametrize('kind', ['empty', 'whitespace', 'default', 'placeholder', 'missing'])
+    def test_short_password_override_still_rejects_unsafe_values(
+        self, production_environment, monkeypatch, name, default, kind,
+    ):
+        from cruciverba.config import validate_production_config
+
+        if kind == 'missing':
+            monkeypatch.delenv(name)
+        else:
+            monkeypatch.setenv(name, {
+                'empty': '', 'whitespace': '   ', 'default': default,
+                'placeholder': 'cambia-questa-password-lunga',
+            }[kind])
+        with pytest.raises(RuntimeError, match=name):
+            validate_production_config()
+
+    def test_password_hashes_take_precedence(self, production_environment, monkeypatch):
+        from werkzeug.security import generate_password_hash
+        from cruciverba.config import validate_production_config
+
+        for name in ('FORM_PASSWORD', 'ADMIN_PASSWORD'):
+            monkeypatch.setenv(name, '')
+            monkeypatch.setenv(name + '_HASH', generate_password_hash('valid-hashed-password'))
+        validate_production_config()
+
     def test_weak_passwords_require_explicit_override(self, monkeypatch):
         from cruciverba.config import validate_production_config
 
@@ -877,6 +914,29 @@ class TestApplicationFactory:
 
 
 class TestPdfDownloads:
+    def test_unicode_characters_survive_pdf_export(self):
+        import io
+        from pypdf import PdfReader
+        from cruciverba.exports import create_pdf_bytes
+
+        submissions = [{
+            'parola': '🎓 2026',
+            'frase_indizio': 'Ricorda <Bianca> 🥳 中文 &lt;3',
+            'nome': 'Zoë 🤩',
+            'timestamp': '2026-07-01 22:30:00',
+        }]
+        content = create_pdf_bytes(submissions, 'Bianca 🎓')
+        text = '\n'.join(page.extract_text() for page in PdfReader(io.BytesIO(content)).pages)
+        for expected in ('Bianca 🎓', '🎓 2026', submissions[0]['frase_indizio'], 'Zoë 🤩'):
+            assert expected in text
+        assert '\x00' not in text
+        assert '02/07/2026 alle 00:30 CEST' in text
+
+    def test_characters_without_a_bundled_glyph_are_explicit(self):
+        from cruciverba.exports import _paragraph_text
+
+        assert _paragraph_text('\U0010ffff') == '[U+10FFFF]'
+
     @pytest.mark.parametrize('authenticated', [False, True])
     def test_pdf_requires_organizer_access(self, client, authenticated):
         if authenticated:
@@ -909,7 +969,7 @@ class TestPdfDownloads:
         assert 'Cruciverba di Èrica' in text
         assert 'CAFFÈ' in text and 'Zoë' in text
         assert '<b>caffè</b> & tè.' in text
-        assert '11/10/2026 alle 12:30' in text
+        assert '11/10/2026 alle 14:30 CEST' in text
         # The original CSV remains downloadable alongside the document.
         assert admin_session.get('/admin/export').mimetype == 'text/csv'
 
@@ -941,3 +1001,39 @@ class TestPdfDownloads:
             assert len(reader.pages) > 1
         for number, page in enumerate(reader.pages, start=1):
             assert f'Pagina {number}' in page.extract_text()
+
+
+class TestLocalDates:
+    @pytest.mark.parametrize('timestamp,expected', [
+        ('2026-07-01 22:30:00', '02/07/2026 alle 00:30 CEST'),
+        ('2026-01-01 23:30:00', '02/01/2026 alle 00:30 CET'),
+        ('2026-03-29 00:30:00', '29/03/2026 alle 01:30 CET'),
+        ('2026-03-29 01:30:00', '29/03/2026 alle 03:30 CEST'),
+        ('2026-10-25 00:30:00', '25/10/2026 alle 02:30 CEST'),
+        ('2026-10-25 01:30:00', '25/10/2026 alle 02:30 CET'),
+        ('2026-07-02T00:30:00+02:00', '02/07/2026 alle 00:30 CEST'),
+        ('not a date', 'not a date'),
+        (None, 'None'),
+    ])
+    def test_utc_dates_use_rome_time(self, timestamp, expected):
+        from cruciverba.dates import display_datetime
+
+        assert display_datetime(timestamp) == expected
+
+    def test_dashboard_csv_and_pdf_share_local_time(self, admin_session):
+        import io
+        from pypdf import PdfReader
+
+        with get_db_connection() as connection:
+            connection.execute(
+                'INSERT INTO submissions (parola, frase_indizio, nome, timestamp) VALUES (?, ?, ?, ?)',
+                ('localtime', 'Un indizio', 'Mario', '2026-07-01 22:30:00'),
+            )
+        expected = '02/07/2026 alle 00:30 CEST'
+        assert expected in admin_session.get('/admin').get_data(as_text=True)
+        assert expected in admin_session.get('/admin/export').get_data(as_text=True)
+        reader = PdfReader(io.BytesIO(admin_session.get('/admin/export/pdf').data))
+        assert expected in '\n'.join(page.extract_text() for page in reader.pages)
+        with get_db_connection() as connection:
+            saved = connection.execute("SELECT timestamp FROM submissions WHERE parola = 'localtime'").fetchone()
+        assert saved['timestamp'] == '2026-07-01 22:30:00'

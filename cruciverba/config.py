@@ -90,11 +90,12 @@ def are_weak_passwords_allowed():
 
 
 def _is_weak(value, default):
-    normalized = (value or "").lower()
+    normalized = (value or "").strip().lower()
     return (
-        len(value or "") < 12
-        or value == default
+        not normalized
+        or normalized == default
         or any(part in normalized for part in PLACEHOLDER_PARTS)
+        or (len(value) < 12 and not are_weak_passwords_allowed())
     )
 
 
@@ -122,18 +123,17 @@ def validate_production_config():
         errors.append("ADMIN_PASSWORD_HASH non è un hash Werkzeug supportato")
     if are_weak_passwords_allowed():
         logger.warning(
-            "ALLOW_WEAK_PASSWORDS=True: controllo robustezza password disattivato"
+            "ALLOW_WEAK_PASSWORDS=True: lunghezza minima password disattivata"
         )
-    else:
-        if not form_hash and _is_weak(get_form_password(), DEFAULT_FORM_PASSWORD):
+    for name, password, default, password_hash in (
+        ("FORM_PASSWORD", get_form_password(), DEFAULT_FORM_PASSWORD, form_hash),
+        ("ADMIN_PASSWORD", get_admin_password(), DEFAULT_ADMIN_PASSWORD, admin_hash),
+    ):
+        if not password_hash and _is_weak(password, default):
             errors.append(
-                "FORM_PASSWORD deve avere almeno 12 caratteri, oppure usa "
-                "FORM_PASSWORD_HASH o ALLOW_WEAK_PASSWORDS=True"
-            )
-        if not admin_hash and _is_weak(get_admin_password(), DEFAULT_ADMIN_PASSWORD):
-            errors.append(
-                "ADMIN_PASSWORD deve avere almeno 12 caratteri, oppure usa "
-                "ADMIN_PASSWORD_HASH o ALLOW_WEAK_PASSWORDS=True"
+                f"{name} non può essere vuota, predefinita o un placeholder; "
+                f"deve avere almeno 12 caratteri, oppure usa {name}_HASH "
+                "o ALLOW_WEAK_PASSWORDS=True per password più corte"
             )
     if not is_https_forced():
         errors.append("FORCE_HTTPS deve essere True in produzione")

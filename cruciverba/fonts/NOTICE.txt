@@ -1,0 +1,19 @@
+GNU Unifont 15.0.06
+
+Copyright © 1998-2023 Roman Czyborra, Paul Hardy, Qianqian Fang,
+Andrew Miller, Johnnie Weaver, David Corbett, Nils Moskopp,
+Rebecca Bettencourt, Minseo Lee, et al.
+
+These fonts are redistributed under the SIL Open Font License 1.1;
+see OFL-1.1.txt. Upstream also offers GPL 2 or later with the GNU
+Font Embedding Exception. The fonts' copyright and license records
+remain embedded in the font files.
+
+Unmodified upstream TrueType files, compressed with gzip:
+Unifont.ttf.gz:
+https://unifoundry.com/pub/unifont/unifont-15.0.06/font-builds/unifont-15.0.06.ttf
+UnifontUpper.ttf.gz:
+https://unifoundry.com/pub/unifont/unifont-15.0.06/font-builds/unifont_upper-15.0.06.ttf
+
+The original source and licenses are available at:
+https://unifoundry.com/pub/unifont/unifont-15.0.06/unifont-15.0.06.tar.gz

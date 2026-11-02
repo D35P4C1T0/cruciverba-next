@@ -33,7 +33,7 @@
         <p class="submission-clue">{{ submission.frase_indizio }}</p>
         <div class="submission-meta">
             <span>{{ submission.nome or 'Anonimo' }}</span>
-            <time>{{ submission.timestamp.split(' ')[0] }} · {{ submission.timestamp.split(' ')[1].split('.')[0] }}</time>
+            <time>{{ submission.timestamp|local_datetime }}</time>
         </div>
         <form method="post" action="{{ url_for('delete_submission', submission_id=submission.id) }}" class="submission-delete">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

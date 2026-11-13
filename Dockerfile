@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.11-slim AS test-stage
+FROM python:3.15-slim AS test-stage
 
-ARG PIP_VERSION=26.2.1
+ARG PIP_VERSION=26.3
 ARG SETUPTOOLS_VERSION=84.0.0
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -29,9 +29,13 @@ USER 10001:10001
 RUN python -m pytest test_app.py -q
 
 
-FROM python:3.11-slim AS production
+FROM python:3.15-slim AS production
 
-ARG PIP_VERSION=26.2.1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG PIP_VERSION=26.3
 ARG SETUPTOOLS_VERSION=84.0.0
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -44,7 +48,8 @@ WORKDIR /app
 COPY requirements-prod.txt .
 RUN python -m pip install --no-cache-dir --upgrade \
         pip==${PIP_VERSION} setuptools==${SETUPTOOLS_VERSION} \
-    && python -m pip install --no-cache-dir -r requirements-prod.txt
+    && python -m pip install --no-cache-dir -r requirements-prod.txt \
+    && python -m pip uninstall -y pip setuptools
 
 RUN addgroup --gid 10001 appgroup \
     && adduser --uid 10001 --gid 10001 --disabled-password --gecos '' appuser \

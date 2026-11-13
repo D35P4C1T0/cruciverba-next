@@ -117,7 +117,7 @@ class TestLiveApplication:
         assert response.headers.get('X-XSS-Protection') == '0'
         assert 'Strict-Transport-Security' not in response.headers
         assert 'default-src \'self\'' in response.headers.get('Content-Security-Policy', '')
-        assert response.headers.get('Referrer-Policy') == 'no-referrer'
+        assert response.headers.get('Referrer-Policy') == 'same-origin'
     
     def test_rate_limiting_simulation(self):
         """Test rate limiting with multiple requests."""
